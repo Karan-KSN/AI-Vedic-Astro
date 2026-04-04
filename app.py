@@ -5,14 +5,16 @@ import pytz
 from google import genai
 import json
 from geopy.geocoders import Nominatim
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 
 # ==========================================
 # 1. PAGE CONFIGURATION & UI SETUP
 # ==========================================
-st.set_page_config(page_title="The Iron Primer's AI Astrologer", page_icon="✨", layout="wide")
+st.set_page_config(page_title="Vedic AI Roadmap", page_icon="✨", layout="wide")
 
 st.title("✨ AI Vedic Astrology Roadmap")
-st.markdown("Enter your birth details to generate a mathematically precise, AI-synthesized life roadmap grounded in the wisdom of the Bhagavad Gita and Chanakya Niti.")
+st.markdown("Enter birth details to generate a precise visual chart and AI-synthesized life roadmap.")
 
 # Sidebar for Security
 with st.sidebar:
@@ -22,8 +24,9 @@ with st.sidebar:
     st.markdown("**Note:** Your key is not saved. It is only used for the current session.")
 
 # ==========================================
-# 2. THE ASTRONOMICAL ENGINE
+# 2. THE ASTRONOMICAL & DRAWING ENGINES
 # ==========================================
+
 def get_coordinates(city_name):
     """Converts a city name to Latitude and Longitude."""
     geolocator = Nominatim(user_agent="iron_primer_astrology_app")
@@ -76,8 +79,7 @@ def generate_natal_matrix(year, month, day, hour, minute, lat, lon, tz_string):
     asc_sign, asc_deg = get_zodiac_info(asc_lon)
     chart_data["Ascendant"] = {"Sign": asc_sign, "Degree": asc_deg, "Total_Lon": round(asc_lon, 4)}
 
-    # Map Houses and Lords directly in this step
-    signs = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", 
+    signs_list = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", 
              "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
              
     lords = {
@@ -86,26 +88,117 @@ def generate_natal_matrix(year, month, day, hour, minute, lat, lon, tz_string):
         "Sagittarius": "Jupiter", "Capricorn": "Saturn", "Aquarius": "Saturn", "Pisces": "Jupiter"
     }
     
-    asc_index = signs.index(asc_sign)
+    asc_index = signs_list.index(asc_sign)
 
     for body, data in chart_data.items():
         if body != "Ascendant":
-            planet_index = signs.index(data["Sign"])
+            planet_index = signs_list.index(data["Sign"])
             chart_data[body]["House"] = ((planet_index - asc_index) % 12) + 1
             chart_data[body]["Sign_Lord"] = lords[data["Sign"]]
 
     return chart_data
 
+def draw_north_indian_chart(chart_data):
+    """Draws a North Indian style chart based on reference image geometry."""
+    
+    # 1. Prep Data
+    rashi_names = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", 
+                   "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
+    
+    # Organize planets by house number
+    planets_by_house = {i: [] for i in range(1, 13)}
+    lagna_rashi_num = 0
+    
+    for body, data in chart_data.items():
+        if body == "Ascendant":
+            lagna_rashi_num = rashi_names.index(data["Sign"]) + 1
+        else:
+            house_num = data["House"]
+            # Shorten names for display (e.g., Jupiter -> Jup)
+            short_name = body[:3] if body not in ["Rahu", "Ketu"] else body
+            planets_by_house[house_num].append(short_name)
+
+    # 2. Setup Plot
+    fig, ax = plt.subplots(figsize=(8, 8), facecolor='#fdfcf5') # Light parchment background
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ax.axis('off') # Hide standard graph axes
+
+    # 3. Draw Lines (Geometry from reference image)
+    line_params = {'color': '#4a4a4a', 'linewidth': 1.5}
+    
+    # Outer Border
+    ax.add_patch(patches.Rectangle((0, 0), 10, 10, fill=False, **line_params))
+    
+    # Main Diagonals
+    ax.plot([0, 10], [0, 10], **line_params)
+    ax.plot([0, 10], [10, 0], **line_params)
+    
+    # Inner Diamond
+    ax.plot([5, 0], [10, 5], **line_params) # Top-mid to Left-mid
+    ax.plot([0, 5], [5, 0], **line_params)  # Left-mid to Bottom-mid
+    ax.plot([5, 10], [0, 5], **line_params) # Bottom-mid to Right-mid
+    ax.plot([10, 5], [5, 10], **line_params)# Right-mid to Top-mid
+
+    # 4. Define Coordinates (The visual layout maps to House Numbers)
+    # North Indian layout places House 1 in the top central diamond.
+    
+    # Coordinates for Rashi Numbers (Corners/Points of triangles)
+    rashi_coords = {
+        1: (5, 5.2), 2: (0.2, 9.4), 3: (0.2, 5.2), 4: (4.8, 5.2),
+        5: (0.2, 4.4), 6: (0.2, 0.2), 7: (5, 4.4), 8: (9.4, 0.2),
+        9: (9.4, 4.4), 10: (5.2, 5.2), 11: (9.4, 5.2), 12: (9.4, 9.4)
+    }
+    
+    # Coordinates for Planets (Center of triangles/diamonds)
+    planet_coords = {
+        1: (5, 7.5), 2: (2.5, 8.8), 3: (1.2, 7.5), 4: (2.5, 6.2),
+        5: (1.2, 2.5), 6: (2.5, 1.2), 7: (5, 2.5), 8: (7.5, 1.2),
+        9: (8.8, 2.5), 10: (7.5, 6.2), 11: (8.8, 7.5), 12: (7.5, 8.8)
+    }
+
+    # 5. Place Text (Rashi Numbers and Planets)
+    for house_num in range(1, 13):
+        # Calculate dynamic Rashi number for this house
+        current_rashi_num = ((lagna_rashi_num + (house_num - 1) - 1) % 12) + 1
+        
+        # Draw Rashi Number (Visual structure from image)
+        r_x, r_y = rashi_coords[house_num]
+        
+        # Special formatting for the center diamond connection points
+        align = 'center'
+        if house_num in [3, 5]: align = 'left'
+        if house_num in [9, 11]: align = 'right'
+            
+        ax.text(r_x, r_y, str(current_rashi_num), fontsize=11, fontweight='bold', 
+                color='#8e24aa', ha=align, va='center') # Purple for Rashi
+
+        # Draw Planets
+        planets = planets_by_house[house_num]
+        if planets:
+            p_x, p_y = planet_coords[house_num]
+            
+            # Label "Asc" for House 1
+            display_text = ""
+            if house_num == 1:
+                display_text = "ASC\n"
+            
+            # Join multiple planets with newlines, limiting per line for neatness
+            if len(planets) > 3:
+                display_text += "\n".join(planets[:2]) + "\n" + "\n".join(planets[2:])
+            else:
+                display_text += "\n".join(planets)
+                
+            ax.text(p_x, p_y, display_text, fontsize=12, fontweight='bold',
+                    color='#263238', ha='center', va='center', linespacing=1.3) # Dark Blue-Grey for planets
+
+    st.pyplot(fig) # Render the Matplotlib chart in Streamlit
+
 # ==========================================
 # 3. THE AI SYNTHESIZER
 # ==========================================
 def generate_life_roadmap(matrix_data, key):
-    """Feeds the calculated matrix to the AI using the new google-genai SDK."""
-    print("\nInitializing AI Synthesizer...")
-    
-    # Using the new Google GenAI Client architecture
     client = genai.Client(api_key=key)
-    
     chart_context = json.dumps(matrix_data, indent=2)
 
     system_prompt = f"""
@@ -114,9 +207,8 @@ def generate_life_roadmap(matrix_data, key):
     
     {chart_context}
     
-    Your objective is to synthesize this raw data into a highly cohesive, actionable life roadmap. 
-    You must resolve any astrological contradictions seamlessly.
-
+    Synthesize this raw data into a highly cohesive, actionable life roadmap. 
+    Resolve any astrological contradictions seamlessly.
     Structure the output strictly as follows:
     
     ## 1. The 12-House Blueprint (Granular Matrix Analysis)
@@ -128,24 +220,14 @@ def generate_life_roadmap(matrix_data, key):
     (Format each house as a sub-heading: ### 1st House (Lagna), ### 2nd House (Wealth & Family), etc.)
 
     ## 2. Professional & Academic Roadmap
-    Synthesize the overall career, wealth, and research trajectory based on the house analysis above.
-    
     ## 3. Anticipated Challenges & Strategic Navigations
-    Highlight key frictional points in the chart and provide strategic methods to navigate them.
-    
     ## 4. Philosophical Anchor 
-    Crucial Instruction: Ground your final advice in the wisdom of the Bhagavad Gita and Chanakya Niti. Use these philosophies to remind the user that while the chart shows tendencies, their Karma (action) and intellect dictate their ultimate destiny. Make them wiser and better prepared for life.
     
-    Speak directly, professionally, and clearly to the individual. Use Markdown formatting.
+    Crucial Instruction for Section 4: Ground your final advice in the wisdom of the Bhagavad Gita and Chanakya Niti. 
+    Speak directly, professionally, and clearly to the individual using Markdown formatting.
     """
 
-    print("Analyzing celestial data and generating granular roadmap... (This takes 5-10 seconds)\n")
-    
-    response = client.models.generate_content(
-        model='gemini-2.5-flash',
-        contents=system_prompt,
-    )
-    
+    response = client.models.generate_content(model='gemini-2.5-flash', contents=system_prompt)
     return response.text
 
 # ==========================================
@@ -154,61 +236,52 @@ def generate_life_roadmap(matrix_data, key):
 col1, col2 = st.columns(2)
 
 with col1:
-    dob = st.date_input("Date of Birth", min_value=datetime.date(1900, 1, 1))
-    city = st.text_input("City of Birth (e.g., New Delhi, London)")
+    dob = st.date_input("Date of Birth", min_value=datetime.date(1900, 1, 1), value=datetime.date(1990, 8, 15))
+    city = st.text_input("City of Birth (e.g., New Delhi, London)", value="New Delhi")
 
 with col2:
-    # Changed from a dropdown picker to a simple text input for exact minute precision
-    time_str = st.text_input(
-        "Time of Birth (HH:MM, 24-hour format)", 
-        value="10:30", 
-        help="Use 24-hour time. For example, 2:15 PM should be typed as 14:15"
-    )
+    time_str = st.text_input("Time of Birth (HH:MM, 24-hour)", value="10:30", help="Use 24-hour format (e.g., 14:30 for 2:30 PM)")
     
-    # Safely attempt to parse the typed string into a time object
     try:
         tob = datetime.datetime.strptime(time_str, "%H:%M").time()
     except ValueError:
-        st.error("⚠️ Please enter a valid time in HH:MM format (e.g., 09:05 or 14:30).")
-        tob = None # This prevents the app from crashing if they type letters
+        st.error("⚠️ Invalid time format. Use HH:MM.")
+        tob = None
 
-    # A standard list of common timezones for the user to select
     tz_options = ["Asia/Kolkata", "America/New_York", "Europe/London", "Australia/Sydney", "UTC"]
     timezone = st.selectbox("Timezone", tz_options)
 
 if st.button("Generate My Roadmap", type="primary"):
-    # Added a check to ensure the time format is valid before running
     if not api_key:
-        st.error("⚠️ Please enter your Google Gemini API Key in the sidebar first.")
+        st.error("⚠️ Please enter your Google Gemini API Key in the sidebar.")
     elif not city:
-        st.error("⚠️ Please enter a City of Birth.")
+        st.error("⚠️ Please enter City.")
     elif tob is None:
-        st.error("⚠️ Please fix your Time of Birth format before generating.")
+        st.error("⚠️ Please fix Time format.")
     else:
-        with st.spinner("Calculating celestial mechanics and synthesizing roadmap..."):
+        with st.spinner("Drawing chart and synthesizing roadmap..."):
             lat, lon = get_coordinates(city)
             
             if lat is None or lon is None:
-                st.error("Could not find coordinates for that city. Please try a different spelling or a larger nearby city.")
+                st.error("Could not find coordinates for that city.")
             else:
                 try:
-                    # Run the math
                     matrix = generate_natal_matrix(
                         year=dob.year, month=dob.month, day=dob.day,
                         hour=tob.hour, minute=tob.minute,
                         lat=lat, lon=lon, tz_string=timezone
                     )
                     
-                    # Run the AI
+                    # --- NEW: Display the Chart First ---
+                    st.subheader("Your Natal Chart (North Indian Style)")
+                    draw_north_indian_chart(matrix)
+                    st.markdown("---")
+                    
+                    # --- Then run and display the AI Roadmap ---
                     roadmap = generate_life_roadmap(matrix, api_key)
                     
-                    # Display the results
                     st.success("Analysis Complete!")
-                    st.markdown("---")
                     st.markdown(roadmap)
                     
-                    with st.expander("View Raw Mathematical Matrix (For Nerds)"):
-                        st.json(matrix)
-                        
                 except Exception as e:
                     st.error(f"An error occurred: {e}")

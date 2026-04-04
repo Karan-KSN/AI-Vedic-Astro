@@ -100,7 +100,12 @@ def generate_natal_matrix(year, month, day, hour, minute, lat, lon, tz_string):
 # 3. THE AI SYNTHESIZER
 # ==========================================
 def generate_life_roadmap(matrix_data, key):
+    """Feeds the calculated matrix to the AI using the new google-genai SDK."""
+    print("\nInitializing AI Synthesizer...")
+    
+    # Using the new Google GenAI Client architecture
     client = genai.Client(api_key=key)
+    
     chart_context = json.dumps(matrix_data, indent=2)
 
     system_prompt = f"""
@@ -109,22 +114,38 @@ def generate_life_roadmap(matrix_data, key):
     
     {chart_context}
     
-    Synthesize this raw data into a highly cohesive, actionable life roadmap. 
-    Resolve any astrological contradictions seamlessly.
+    Your objective is to synthesize this raw data into a highly cohesive, actionable life roadmap. 
+    You must resolve any astrological contradictions seamlessly.
+
     Structure the output strictly as follows:
-    ## 1. The Core Blueprint (Strengths & Natural Inclinations)
-    ## 2. Professional & Academic Roadmap
-    ## 3. Anticipated Challenges & Strategic Navigations
-    ## 4. Philosophical Anchor 
     
-    Crucial Instruction for Section 4: Ground your final advice in the wisdom of the Bhagavad Gita and Chanakya Niti. 
-    Speak directly, professionally, and clearly to the individual using Markdown formatting.
+    ## 1. The 12-House Blueprint (Granular Matrix Analysis)
+    You MUST go through every single house sequentially, starting from the 1st House (Lagna) through the 12th House. For EVERY house, explicitly state and analyze:
+    * The Zodiac sign governing that house.
+    * Any planets currently occupying that house.
+    * The Lord of that house, and specifically which house and sign that Lord has gone to sit in.
+    * The synthesized real-world effect of this specific inter-relation on the individual's life.
+    (Format each house as a sub-heading: ### 1st House (Lagna), ### 2nd House (Wealth & Family), etc.)
+
+    ## 2. Professional & Academic Roadmap
+    Synthesize the overall career, wealth, and research trajectory based on the house analysis above.
+    
+    ## 3. Anticipated Challenges & Strategic Navigations
+    Highlight key frictional points in the chart and provide strategic methods to navigate them.
+    
+    ## 4. Philosophical Anchor 
+    Crucial Instruction: Ground your final advice in the wisdom of the Bhagavad Gita and Chanakya Niti. Use these philosophies to remind the user that while the chart shows tendencies, their Karma (action) and intellect dictate their ultimate destiny. Make them wiser and better prepared for life.
+    
+    Speak directly, professionally, and clearly to the individual. Use Markdown formatting.
     """
 
+    print("Analyzing celestial data and generating granular roadmap... (This takes 5-10 seconds)\n")
+    
     response = client.models.generate_content(
         model='gemini-2.5-flash',
         contents=system_prompt,
     )
+    
     return response.text
 
 # ==========================================

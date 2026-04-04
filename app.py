@@ -77,11 +77,15 @@ def generate_natal_matrix(year, month, day, hour, minute, lat, lon, tz_string):
     chart_data["Ascendant"] = {"Sign": asc_sign, "Degree": asc_deg, "Total_Lon": round(asc_lon, 4)}
 
     # Map Houses and Lords directly in this step
+    signs = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", 
+             "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
+             
     lords = {
         "Aries": "Mars", "Taurus": "Venus", "Gemini": "Mercury", "Cancer": "Moon", 
         "Leo": "Sun", "Virgo": "Mercury", "Libra": "Venus", "Scorpio": "Mars", 
         "Sagittarius": "Jupiter", "Capricorn": "Saturn", "Aquarius": "Saturn", "Pisces": "Jupiter"
     }
+    
     asc_index = signs.index(asc_sign)
 
     for body, data in chart_data.items():

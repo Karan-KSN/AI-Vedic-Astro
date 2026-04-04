@@ -133,16 +133,32 @@ with col1:
     city = st.text_input("City of Birth (e.g., New Delhi, London)")
 
 with col2:
-    tob = st.time_input("Time of Birth")
+    # Changed from a dropdown picker to a simple text input for exact minute precision
+    time_str = st.text_input(
+        "Time of Birth (HH:MM, 24-hour format)", 
+        value="10:30", 
+        help="Use 24-hour time. For example, 2:15 PM should be typed as 14:15"
+    )
+    
+    # Safely attempt to parse the typed string into a time object
+    try:
+        tob = datetime.datetime.strptime(time_str, "%H:%M").time()
+    except ValueError:
+        st.error("⚠️ Please enter a valid time in HH:MM format (e.g., 09:05 or 14:30).")
+        tob = None # This prevents the app from crashing if they type letters
+
     # A standard list of common timezones for the user to select
     tz_options = ["Asia/Kolkata", "America/New_York", "Europe/London", "Australia/Sydney", "UTC"]
     timezone = st.selectbox("Timezone", tz_options)
 
 if st.button("Generate My Roadmap", type="primary"):
+    # Added a check to ensure the time format is valid before running
     if not api_key:
         st.error("⚠️ Please enter your Google Gemini API Key in the sidebar first.")
     elif not city:
         st.error("⚠️ Please enter a City of Birth.")
+    elif tob is None:
+        st.error("⚠️ Please fix your Time of Birth format before generating.")
     else:
         with st.spinner("Calculating celestial mechanics and synthesizing roadmap..."):
             lat, lon = get_coordinates(city)

@@ -3,3 +3,4 @@ pyswisseph
 pytz
 google-genai
 geopy
+matplotlib

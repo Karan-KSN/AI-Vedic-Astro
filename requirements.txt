@@ -4,3 +4,4 @@ pytz
 google-genai
 geopy
 matplotlib
+reportlab

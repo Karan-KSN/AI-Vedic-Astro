@@ -7,281 +7,174 @@ import json
 from geopy.geocoders import Nominatim
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+import io
+
+# PDF Generation Imports
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
 
 # ==========================================
-# 1. PAGE CONFIGURATION & UI SETUP
+# 1. PAGE CONFIGURATION
 # ==========================================
 st.set_page_config(page_title="Vedic AI Roadmap", page_icon="✨", layout="wide")
 
 st.title("✨ AI Vedic Astrology Roadmap")
-st.markdown("Enter birth details to generate a precise visual chart and AI-synthesized life roadmap.")
+st.markdown("Generate a precise visual chart and a professional PDF roadmap.")
 
-# Sidebar for Security
 with st.sidebar:
-    st.header("⚙️ Engine Configuration")
-    api_key = st.text_input("Enter Google Gemini API Key:", type="password", help="Get this from Google AI Studio")
-    st.markdown("---")
-    st.markdown("**Note:** Your key is not saved. It is only used for the current session.")
+    st.header("⚙️ Configuration")
+    api_key = st.text_input("Enter Google Gemini API Key:", type="password")
+    st.info("Your key is processed in-memory and never stored.")
 
 # ==========================================
-# 2. THE ASTRONOMICAL & DRAWING ENGINES
+# 2. CALCULATION & DRAWING ENGINES
 # ==========================================
 
 def get_coordinates(city_name):
-    """Converts a city name to Latitude and Longitude."""
     geolocator = Nominatim(user_agent="iron_primer_astrology_app")
     try:
         location = geolocator.geocode(city_name)
-        if location:
-            return location.latitude, location.longitude
-        return None, None
-    except:
-        return None, None
+        return (location.latitude, location.longitude) if location else (None, None)
+    except: return (None, None)
 
 def get_zodiac_info(longitude):
-    signs = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", 
-             "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
-    sign_index = int(longitude / 30)
-    degree = longitude % 30
-    return signs[sign_index], round(degree, 4)
+    signs = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
+    return signs[int(longitude / 30)], round(longitude % 30, 4)
 
 def generate_natal_matrix(year, month, day, hour, minute, lat, lon, tz_string):
     local_tz = pytz.timezone(tz_string)
     local_time = local_tz.localize(datetime.datetime(year, month, day, hour, minute))
     utc_time = local_time.astimezone(pytz.utc)
-
-    jd = swe.julday(utc_time.year, utc_time.month, utc_time.day, 
-                    utc_time.hour + utc_time.minute / 60.0)
-
+    jd = swe.julday(utc_time.year, utc_time.month, utc_time.day, utc_time.hour + utc_time.minute / 60.0)
     swe.set_sid_mode(swe.SIDM_LAHIRI)
     flags = swe.FLG_SIDEREAL | swe.FLG_SWIEPH
-
-    planets = {
-        "Sun": swe.SUN, "Moon": swe.MOON, "Mars": swe.MARS,
-        "Mercury": swe.MERCURY, "Jupiter": swe.JUPITER, 
-        "Venus": swe.VENUS, "Saturn": swe.SATURN, "Rahu": swe.TRUE_NODE
-    }
-
+    planets = {"Sun": swe.SUN, "Moon": swe.MOON, "Mars": swe.MARS, "Mercury": swe.MERCURY, "Jupiter": swe.JUPITER, "Venus": swe.VENUS, "Saturn": swe.SATURN, "Rahu": swe.TRUE_NODE}
     chart_data = {}
-
-    for name, planet_id in planets.items():
-        pos, _ = swe.calc_ut(jd, planet_id, flags)
-        lon_deg = pos[0] 
-        sign, deg = get_zodiac_info(lon_deg)
-        chart_data[name] = {"Sign": sign, "Degree": deg, "Total_Lon": round(lon_deg, 4)}
-
+    for name, p_id in planets.items():
+        pos, _ = swe.calc_ut(jd, p_id, flags)
+        sign, deg = get_zodiac_info(pos[0])
+        chart_data[name] = {"Sign": sign, "Degree": deg, "Total_Lon": round(pos[0], 4)}
     ketu_lon = (chart_data["Rahu"]["Total_Lon"] + 180) % 360
     k_sign, k_deg = get_zodiac_info(ketu_lon)
     chart_data["Ketu"] = {"Sign": k_sign, "Degree": k_deg, "Total_Lon": round(ketu_lon, 4)}
-
     houses, ascmc = swe.houses_ex(jd, lat, lon, b'P', flags)
-    asc_lon = ascmc[0]
-    asc_sign, asc_deg = get_zodiac_info(asc_lon)
-    chart_data["Ascendant"] = {"Sign": asc_sign, "Degree": asc_deg, "Total_Lon": round(asc_lon, 4)}
-
-    signs_list = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", 
-             "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
-             
-    lords = {
-        "Aries": "Mars", "Taurus": "Venus", "Gemini": "Mercury", "Cancer": "Moon", 
-        "Leo": "Sun", "Virgo": "Mercury", "Libra": "Venus", "Scorpio": "Mars", 
-        "Sagittarius": "Jupiter", "Capricorn": "Saturn", "Aquarius": "Saturn", "Pisces": "Jupiter"
-    }
-    
-    asc_index = signs_list.index(asc_sign)
-
-    for body, data in chart_data.items():
-        if body != "Ascendant":
-            planet_index = signs_list.index(data["Sign"])
-            chart_data[body]["House"] = ((planet_index - asc_index) % 12) + 1
-            chart_data[body]["Sign_Lord"] = lords[data["Sign"]]
-
+    asc_sign, asc_deg = get_zodiac_info(ascmc[0])
+    chart_data["Ascendant"] = {"Sign": asc_sign, "Degree": asc_deg, "Total_Lon": round(ascmc[0], 4)}
+    signs_list = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
+    lords = {"Aries": "Mars", "Taurus": "Venus", "Gemini": "Mercury", "Cancer": "Moon", "Leo": "Sun", "Virgo": "Mercury", "Libra": "Venus", "Scorpio": "Mars", "Sagittarius": "Jupiter", "Capricorn": "Saturn", "Aquarius": "Saturn", "Pisces": "Jupiter"}
+    asc_idx = signs_list.index(asc_sign)
+    for b, d in chart_data.items():
+        if b != "Ascendant":
+            p_idx = signs_list.index(d["Sign"])
+            chart_data[b]["House"] = ((p_idx - asc_idx) % 12) + 1
+            chart_data[b]["Sign_Lord"] = lords[d["Sign"]]
     return chart_data
 
 def draw_north_indian_chart(chart_data):
-    """Draws a North Indian style chart based on reference image geometry."""
-    
-    # 1. Prep Data
-    rashi_names = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", 
-                   "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
-    
-    # Organize planets by house number
+    rashi_names = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
     planets_by_house = {i: [] for i in range(1, 13)}
-    lagna_rashi_num = 0
-    
+    lagna_rashi_num = rashi_names.index(chart_data["Ascendant"]["Sign"]) + 1
     for body, data in chart_data.items():
-        if body == "Ascendant":
-            lagna_rashi_num = rashi_names.index(data["Sign"]) + 1
-        else:
-            house_num = data["House"]
-            # Shorten names for display (e.g., Jupiter -> Jup)
+        if body != "Ascendant":
             short_name = body[:3] if body not in ["Rahu", "Ketu"] else body
-            planets_by_house[house_num].append(short_name)
-
-    # 2. Setup Plot
-    fig, ax = plt.subplots(figsize=(8, 8), facecolor='#fdfcf5') # Light parchment background
-    ax.set_xlim(0, 10)
-    ax.set_ylim(0, 10)
-    ax.axis('off') # Hide standard graph axes
-
-    # 3. Draw Lines (Geometry from reference image)
+            planets_by_house[data["House"]].append(short_name)
+    fig, ax = plt.subplots(figsize=(6, 6), facecolor='#fdfcf5')
+    ax.set_xlim(0, 10); ax.set_ylim(0, 10); ax.axis('off')
     line_params = {'color': '#4a4a4a', 'linewidth': 1.5}
-    
-    # Outer Border
     ax.add_patch(patches.Rectangle((0, 0), 10, 10, fill=False, **line_params))
-    
-    # Main Diagonals
-    ax.plot([0, 10], [0, 10], **line_params)
-    ax.plot([0, 10], [10, 0], **line_params)
-    
-    # Inner Diamond
-    ax.plot([5, 0], [10, 5], **line_params) # Top-mid to Left-mid
-    ax.plot([0, 5], [5, 0], **line_params)  # Left-mid to Bottom-mid
-    ax.plot([5, 10], [0, 5], **line_params) # Bottom-mid to Right-mid
-    ax.plot([10, 5], [5, 10], **line_params)# Right-mid to Top-mid
-
-    # 4. Define Coordinates (The visual layout maps to House Numbers)
-    # North Indian layout places House 1 in the top central diamond.
-    
-    # Coordinates for Rashi Numbers (Corners/Points of triangles)
-    rashi_coords = {
-        1: (5, 5.2), 2: (0.2, 9.4), 3: (0.2, 5.2), 4: (4.8, 5.2),
-        5: (0.2, 4.4), 6: (0.2, 0.2), 7: (5, 4.4), 8: (9.4, 0.2),
-        9: (9.4, 4.4), 10: (5.2, 5.2), 11: (9.4, 5.2), 12: (9.4, 9.4)
-    }
-    
-    # Coordinates for Planets (Center of triangles/diamonds)
-    planet_coords = {
-        1: (5, 7.5), 2: (2.5, 8.8), 3: (1.2, 7.5), 4: (2.5, 6.2),
-        5: (1.2, 2.5), 6: (2.5, 1.2), 7: (5, 2.5), 8: (7.5, 1.2),
-        9: (8.8, 2.5), 10: (7.5, 6.2), 11: (8.8, 7.5), 12: (7.5, 8.8)
-    }
-
-    # 5. Place Text (Rashi Numbers and Planets)
-    for house_num in range(1, 13):
-        # Calculate dynamic Rashi number for this house
-        current_rashi_num = ((lagna_rashi_num + (house_num - 1) - 1) % 12) + 1
-        
-        # Draw Rashi Number (Visual structure from image)
-        r_x, r_y = rashi_coords[house_num]
-        
-        # Special formatting for the center diamond connection points
-        align = 'center'
-        if house_num in [3, 5]: align = 'left'
-        if house_num in [9, 11]: align = 'right'
-            
-        ax.text(r_x, r_y, str(current_rashi_num), fontsize=11, fontweight='bold', 
-                color='#8e24aa', ha=align, va='center') # Purple for Rashi
-
-        # Draw Planets
-        planets = planets_by_house[house_num]
-        if planets:
-            p_x, p_y = planet_coords[house_num]
-            
-            # Label "Asc" for House 1
-            display_text = ""
-            if house_num == 1:
-                display_text = "ASC\n"
-            
-            # Join multiple planets with newlines, limiting per line for neatness
-            if len(planets) > 3:
-                display_text += "\n".join(planets[:2]) + "\n" + "\n".join(planets[2:])
-            else:
-                display_text += "\n".join(planets)
-                
-            ax.text(p_x, p_y, display_text, fontsize=12, fontweight='bold',
-                    color='#263238', ha='center', va='center', linespacing=1.3) # Dark Blue-Grey for planets
-
-    st.pyplot(fig) # Render the Matplotlib chart in Streamlit
+    ax.plot([0, 10], [0, 10], **line_params); ax.plot([0, 10], [10, 0], **line_params)
+    ax.plot([5, 0, 5, 10, 5], [10, 5, 0, 5, 10], **line_params)
+    r_coords = {1: (5, 5.2), 2: (0.2, 9.4), 3: (0.2, 5.2), 4: (4.8, 5.2), 5: (0.2, 4.4), 6: (0.2, 0.2), 7: (5, 4.4), 8: (9.4, 0.2), 9: (9.4, 4.4), 10: (5.2, 5.2), 11: (9.4, 5.2), 12: (9.4, 9.4)}
+    p_coords = {1: (5, 7.5), 2: (2.5, 8.8), 3: (1.2, 7.5), 4: (2.5, 6.2), 5: (1.2, 2.5), 6: (2.5, 1.2), 7: (5, 2.5), 8: (7.5, 1.2), 9: (8.8, 2.5), 10: (7.5, 6.2), 11: (8.8, 7.5), 12: (7.5, 8.8)}
+    for h in range(1, 13):
+        curr_r = ((lagna_rashi_num + (h - 1) - 1) % 12) + 1
+        rx, ry = r_coords[h]
+        ax.text(rx, ry, str(curr_r), fontsize=9, fontweight='bold', color='#8e24aa', ha='center', va='center')
+        p_list = planets_by_house[h]
+        if p_list:
+            px, py = p_coords[h]
+            txt = ("ASC\n" if h==1 else "") + "\n".join(p_list)
+            ax.text(px, py, txt, fontsize=10, fontweight='bold', color='#263238', ha='center', va='center')
+    return fig
 
 # ==========================================
-# 3. THE AI SYNTHESIZER
+# 3. PDF GENERATION LOGIC
+# ==========================================
+def create_pdf(chart_fig, roadmap_text):
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4)
+    styles = getSampleStyleSheet()
+    
+    # Custom Styles
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=18, spaceAfter=20, alignment=1)
+    body_style = ParagraphStyle('BodyStyle', parent=styles['Normal'], fontSize=11, leading=14, spaceAfter=10)
+    
+    elements = []
+    elements.append(Paragraph("Personalized AI Vedic Roadmap", title_style))
+    
+    # 1. Add Chart Image
+    img_buf = io.BytesIO()
+    chart_fig.savefig(img_buf, format='png', bbox_inches='tight', dpi=150)
+    img_buf.seek(0)
+    img = Image(img_buf, 4*inch, 4*inch)
+    elements.append(img)
+    elements.append(Spacer(1, 0.5*inch))
+    
+    # 2. Add AI Text (Convert Markdown-ish lines to PDF Paragraphs)
+    for line in roadmap_text.split('\n'):
+        if line.strip():
+            # Basic markdown conversion
+            clean_line = line.replace('**', '').replace('##', '').replace('###', '').strip()
+            if line.startswith('##'):
+                elements.append(Paragraph(clean_line, styles['Heading2']))
+            elif line.startswith('###'):
+                elements.append(Paragraph(clean_line, styles['Heading3']))
+            else:
+                elements.append(Paragraph(clean_line, body_style))
+    
+    doc.build(elements)
+    buf.seek(0)
+    return buf
+
+# ==========================================
+# 4. AI & UI INTERFACE
 # ==========================================
 def generate_life_roadmap(matrix_data, key):
     client = genai.Client(api_key=key)
-    chart_context = json.dumps(matrix_data, indent=2)
-
-    system_prompt = f"""
-    You are an elite Vedic Astrologer and strategic life guide. 
-    Analyze the following mathematically exact natal chart matrix:
-    
-    {chart_context}
-    
-    Synthesize this raw data into a highly cohesive, actionable life roadmap. 
-    Resolve any astrological contradictions seamlessly.
-    Structure the output strictly as follows:
-    
-    ## 1. The 12-House Blueprint (Granular Matrix Analysis)
-    You MUST go through every single house sequentially, starting from the 1st House (Lagna) through the 12th House. For EVERY house, explicitly state and analyze:
-    * The Zodiac sign governing that house.
-    * Any planets currently occupying that house.
-    * The Lord of that house, and specifically which house and sign that Lord has gone to sit in.
-    * The synthesized real-world effect of this specific inter-relation on the individual's life.
-    (Format each house as a sub-heading: ### 1st House (Lagna), ### 2nd House (Wealth & Family), etc.)
-
-    ## 2. Professional & Academic Roadmap
-    ## 3. Anticipated Challenges & Strategic Navigations
-    ## 4. Philosophical Anchor 
-    
-    Crucial Instruction for Section 4: Ground your final advice in the wisdom of the Bhagavad Gita and Chanakya Niti. 
-    Speak directly, professionally, and clearly to the individual using Markdown formatting.
-    """
-
+    system_prompt = f"Act as an elite Vedic Astrologer. Analyze this JSON: {json.dumps(matrix_data)}. Provide a granular 12-house analysis followed by professional roadmap and philosophical anchors using Bhagavad Gita and Chanakya Niti. Use Markdown."
     response = client.models.generate_content(model='gemini-2.5-flash', contents=system_prompt)
     return response.text
 
-# ==========================================
-# 4. FRONT-END INTERFACE
-# ==========================================
 col1, col2 = st.columns(2)
-
 with col1:
-    dob = st.date_input("Date of Birth", min_value=datetime.date(1900, 1, 1), value=datetime.date(1990, 8, 15))
-    city = st.text_input("City of Birth (e.g., New Delhi, London)", value="New Delhi")
-
+    dob = st.date_input("DOB", value=datetime.date(1990, 8, 15))
+    city = st.text_input("City", value="New Delhi")
 with col2:
-    time_str = st.text_input("Time of Birth (HH:MM, 24-hour)", value="10:30", help="Use 24-hour format (e.g., 14:30 for 2:30 PM)")
-    
-    try:
-        tob = datetime.datetime.strptime(time_str, "%H:%M").time()
-    except ValueError:
-        st.error("⚠️ Invalid time format. Use HH:MM.")
-        tob = None
+    time_str = st.text_input("Time (HH:MM)", value="10:30")
+    timezone = st.selectbox("Timezone", ["Asia/Kolkata", "America/New_York", "UTC"])
 
-    tz_options = ["Asia/Kolkata", "America/New_York", "Europe/London", "Australia/Sydney", "UTC"]
-    timezone = st.selectbox("Timezone", tz_options)
-
-if st.button("Generate My Roadmap", type="primary"):
-    if not api_key:
-        st.error("⚠️ Please enter your Google Gemini API Key in the sidebar.")
-    elif not city:
-        st.error("⚠️ Please enter City.")
-    elif tob is None:
-        st.error("⚠️ Please fix Time format.")
+if st.button("Analyze & Generate PDF", type="primary"):
+    if not api_key: st.error("Add API Key")
     else:
-        with st.spinner("Drawing chart and synthesizing roadmap..."):
+        with st.spinner("Processing..."):
             lat, lon = get_coordinates(city)
+            matrix = generate_natal_matrix(dob.year, dob.month, dob.day, int(time_str.split(':')[0]), int(time_str.split(':')[1]), lat, lon, timezone)
             
-            if lat is None or lon is None:
-                st.error("Could not find coordinates for that city.")
-            else:
-                try:
-                    matrix = generate_natal_matrix(
-                        year=dob.year, month=dob.month, day=dob.day,
-                        hour=tob.hour, minute=tob.minute,
-                        lat=lat, lon=lon, tz_string=timezone
-                    )
-                    
-                    # --- NEW: Display the Chart First ---
-                    st.subheader("Your Natal Chart (North Indian Style)")
-                    draw_north_indian_chart(matrix)
-                    st.markdown("---")
-                    
-                    # --- Then run and display the AI Roadmap ---
-                    roadmap = generate_life_roadmap(matrix, api_key)
-                    
-                    st.success("Analysis Complete!")
-                    st.markdown(roadmap)
-                    
-                except Exception as e:
-                    st.error(f"An error occurred: {e}")
+            # Display Chart
+            fig = draw_north_indian_chart(matrix)
+            st.pyplot(fig)
+            
+            # Generate & Display Text
+            roadmap = generate_life_roadmap(matrix, api_key)
+            st.markdown(roadmap)
+            
+            # Create PDF for Download
+            pdf_buf = create_pdf(fig, roadmap)
+            st.download_button(
+                label="📥 Download Roadmap PDF",
+                data=pdf_buf,
+                file_name=f"Vedic_Roadmap_{dob}.pdf",
+                mime="application/pdf"
+            )

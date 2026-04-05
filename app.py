@@ -1,30 +1,24 @@
 import streamlit as st
-import os
+import matplotlib
+matplotlib.use('Agg') # Essential for Streamlit Cloud stability
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+import swisseph as swe
+import datetime
+import pytz
+from google import genai
+import json
+from geopy.geocoders import Nominatim
+import io
 
-# --- PRE-FLIGHT CHECK ---
-# This prevents the "Black Screen" by catching errors before the app starts.
-try:
-    import matplotlib
-    matplotlib.use('Agg') # Force non-interactive backend for cloud servers
-    import matplotlib.pyplot as plt
-    import matplotlib.patches as patches
-    import swisseph as swe
-    import datetime
-    import pytz
-    from google import genai
-    import json
-    from geopy.geocoders import Nominatim
-    import io
-    from reportlab.lib.pagesizes import A4
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
-    from reportlab.lib.styles import getSampleStyleSheet
-    from reportlab.lib.units import inch
-except ImportError as e:
-    st.error(f"❌ Critical Error: Missing Library. Please ensure your requirements.txt is correct. Error: {e}")
-    st.stop()
+# PDF Generation
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import inch
 
 # ==========================================
-# 1. THE BRAIN (MATH & LOGIC)
+# 1. GLOBAL CONSTANTS & DIGNITY LOGIC
 # ==========================================
 
 SIGNS = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
@@ -45,32 +39,47 @@ def get_planet_dignity(planet, sign):
         if sign == dignities[planet]["Deb"]: return "Debilitated (Neecha)"
     return "Neutral"
 
+# ==========================================
+# 2. ASTRONOMICAL & DASHA ENGINES
+# ==========================================
+
 def get_coords(city):
-    geo = Nominatim(user_agent="iron_primer_v3")
+    geo = Nominatim(user_agent="iron_primer_research_v4")
     try:
         loc = geo.geocode(city)
         return (loc.latitude, loc.longitude) if loc else (None, None)
     except: return (None, None)
 
 def get_dasha_data(moon_lon, dob):
-    nakshatras = [("Ashwini", "Ketu", 7), ("Bharani", "Venus", 20), ("Krittika", "Sun", 6), ("Rohini", "Moon", 10), ("Mrigashira", "Mars", 7), ("Ardra", "Rahu", 18), ("Punarvasu", "Jupiter", 16), ("Pushya", "Saturn", 19), ("Ashlesha", "Mercury", 17), ("Magha", "Ketu", 7), ("Purva Phalguni", "Venus", 20), ("Uttara Phalguni", "Sun", 6), ("Hasta", "Moon", 10), ("Chitra", "Mars", 7), ("Swati", "Rahu", 18), ("Vishakha", "Jupiter", 16), ("Anuradha", "Saturn", 19), ("Jyeshtha", "Mercury", 17), ("Mula", "Ketu", 7), ("Purva Ashadha", "Venus", 20), ("Uttara Ashadha", "Sun", 6), ("Shravana", "Moon", 10), ("Dhanishta", "Mars", 7), ("Shatabhisha", "Rahu", 18), ("Purva Bhadrapada", "Jupiter", 16), ("Uttara Bhadrapada", "Saturn", 19), ("Revati", "Mercury", 17)]
+    nakshatras = [
+        ("Ashwini", "Ketu", 7), ("Bharani", "Venus", 20), ("Krittika", "Sun", 6),
+        ("Rohini", "Moon", 10), ("Mrigashira", "Mars", 7), ("Ardra", "Rahu", 18),
+        ("Punarvasu", "Jupiter", 16), ("Pushya", "Saturn", 19), ("Ashlesha", "Mercury", 17),
+        ("Magha", "Ketu", 7), ("Purva Phalguni", "Venus", 20), ("Uttara Phalguni", "Sun", 6),
+        ("Hasta", "Moon", 10), ("Chitra", "Mars", 7), ("Swati", "Rahu", 18),
+        ("Vishakha", "Jupiter", 16), ("Anuradha", "Saturn", 19), ("Jyeshtha", "Mercury", 17),
+        ("Mula", "Ketu", 7), ("Purva Ashadha", "Venus", 20), ("Uttara Ashadha", "Sun", 6),
+        ("Shravana", "Moon", 10), ("Dhanishta", "Mars", 7), ("Shatabhisha", "Rahu", 18),
+        ("Purva Bhadrapada", "Jupiter", 16), ("Uttara Bhadrapada", "Saturn", 19), ("Revati", "Mercury", 17)
+    ]
     idx = int(moon_lon / (360/27))
-    name, lord, yrs = nakshatras[idx]
+    lord = nakshatras[idx][1]
+    yrs = nakshatras[idx][2]
     bal = (( (360/27) - (moon_lon % (360/27)) ) / (360/27)) * yrs
     
     order = ["Ketu", "Venus", "Sun", "Moon", "Mars", "Rahu", "Jupiter", "Saturn", "Mercury"]
-    dasha_yrs = {"Ketu": 7, "Venus": 20, "Sun": 6, "Moon": 10, "Mars": 7, "Rahu": 18, "Jupiter": 16, "Saturn": 19, "Mercury": 17}
+    d_yrs = {"Ketu": 7, "Venus": 20, "Sun": 6, "Moon": 10, "Mars": 7, "Rahu": 18, "Jupiter": 16, "Saturn": 19, "Mercury": 17}
     age = (datetime.datetime.now().year - dob.year)
     d_idx = order.index(lord)
     cumul = bal
     while cumul < age:
         d_idx = (d_idx + 1) % 9
-        cumul += dasha_yrs[order[d_idx]]
+        cumul += d_yrs[order[d_idx]]
     return order[d_idx]
 
-def calculate_chart(y, m, d, h, min, lat, lon, tz):
+def calculate_chart(y, m, d, h, min_val, lat, lon, tz):
     local_tz = pytz.timezone(tz)
-    l_time = local_tz.localize(datetime.datetime(y, m, d, h, min))
+    l_time = local_tz.localize(datetime.datetime(y, m, d, h, min_val))
     utc = l_time.astimezone(pytz.utc)
     jd = swe.julday(utc.year, utc.month, utc.day, utc.hour + utc.minute / 60.0)
     swe.set_sid_mode(swe.SIDM_LAHIRI)
@@ -96,7 +105,7 @@ def calculate_chart(y, m, d, h, min, lat, lon, tz):
     return data
 
 # ==========================================
-# 2. VISUALIZATION ENGINE
+# 3. VISUALIZATION ENGINE
 # ==========================================
 
 def draw_chart(data):
@@ -124,42 +133,55 @@ def draw_chart(data):
     return fig
 
 # ==========================================
-# 3. INTERFACE & REPORTING
+# 4. INTERFACE & CORE APP
 # ==========================================
 
-st.set_page_config(page_title="Iron Primer PhD Engine", page_icon="🧬")
-st.title("🧬 Vedic-Nutrigenetic Research App")
+st.set_page_config(page_title="Iron Primer Research Engine", page_icon="🧬")
+st.title("🧬 Vedic-Nutrigenetic Research Platform")
 
 with st.sidebar:
     st.header("🔑 Authentication")
     api_key = st.text_input("Gemini API Key", type="password")
-    st.info("Built for PhD research in Nutrigenetics & Vedic Studies.")
 
 c1, c2 = st.columns(2)
 with c1:
-    dob = st.date_input("Date of Birth", value=datetime.date(1990, 8, 15))
-    city = st.text_input("City", value="Patiala")
+    dob_text = st.text_input("Date of Birth (DD-MM-YYYY)", value="15-08-1990", help="Use the format DD-MM-YYYY (e.g., 25-12-1985)")
+    city = st.text_input("City of Birth", value="Patiala")
 with c2:
-    time_str = st.text_input("Time (HH:MM)", value="10:30")
+    time_text = st.text_input("Time of Birth (HH:MM)", value="10:30", help="Use 24-hour format (e.g., 14:30 for 2:30 PM)")
     tz = st.selectbox("Timezone", ["Asia/Kolkata", "UTC", "America/New_York"])
 
-st.subheader("🛡️ Resilience Profile")
+st.subheader("🛡️ Resilience & Molecular Defense")
 res_c1, res_c2 = st.columns(2)
 with res_c1:
     diet = st.checkbox("High Antioxidant Intake (Nrf2 Path)")
+    meditation = st.checkbox("Regulated Vagus Toning (Pranayama)")
 with res_c2:
-    snps = st.multiselect("Genomic Strengths", ["SOD2 Efficient", "ACE I/I", "MTHFR Normal"])
+    snps = st.multiselect("Confirmed Genomic Markers", ["SOD2 Efficient", "ACE I/I", "MTHFR Normal"])
 
-if st.button("Generate PhD Roadmap"):
-    if not api_key: st.error("Please enter your API Key.")
+if st.button("Generate PhD Analysis"):
+    if not api_key:
+        st.error("⚠️ Enter Gemini API Key in sidebar.")
     else:
         try:
-            with st.spinner("Calculating G x E x T Interactions..."):
+            # Date and Time Validation
+            try:
+                dob = datetime.datetime.strptime(dob_text, "%d-%m-%Y").date()
+            except:
+                st.error("❌ Invalid Date format. Use DD-MM-YYYY.")
+                st.stop()
+            
+            try:
+                h_val, m_val = map(int, time_text.split(':'))
+            except:
+                st.error("❌ Invalid Time format. Use HH:MM.")
+                st.stop()
+
+            with st.spinner("Analyzing Genomic & Celestial Inter-relations..."):
                 lat, lon = get_coords(city)
                 if not lat: st.error("City not found."); st.stop()
                 
-                h, m = map(int, time_str.split(':'))
-                matrix = calculate_chart(dob.year, dob.month, dob.day, h, m, lat, lon, tz)
+                matrix = calculate_chart(dob.year, dob.month, dob.day, h_val, m_val, lat, lon, tz)
                 dasha = get_dasha_data(matrix["Moon"]["Lon"], dob)
                 
                 # Visuals
@@ -170,25 +192,28 @@ if st.button("Generate PhD Roadmap"):
                 client = genai.Client(api_key=api_key)
                 prompt = f"""
                 Elite PhD Analysis for: The Iron Primer.
-                Matrix: {json.dumps(matrix)}
+                Current Matrix Data: {json.dumps(matrix)}
                 Current Dasha: {dasha}
-                Resilience: {json.dumps({'diet': diet, 'snps': snps})}
+                Resilience Context: {json.dumps({'diet': diet, 'lifestyle': meditation, 'snps': snps})}
                 
-                1. 12-House detailed chain analysis.
-                2. Nutrigenetics: Cite (Author, Year) for ACE, SOD2, or VDR based on placements.
-                3. Resilience: Explain why some face oxidative stress and this user might not.
-                4. Wisdom: Bhagavad Gita and Chanakya Niti application.
+                REQUIREMENTS:
+                1. 12-House detailed dispositor chain analysis.
+                2. Nutrigenetics: Correlate planetary dignity with markers like ACE, SOD2, VDR. 
+                   Cite specific scientific literature (Author, Year, Journal).
+                3. Resilience Theory: Explain why some individuals experience transit-based oxidative stress while this user may be protected by their biological buffers.
+                4. Wisdom: Synthesize advice using Bhagavad Gita (18.14) and Chanakya Niti.
                 """
                 report = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+                st.markdown("---")
                 st.markdown(report.text)
                 
-                # PDF Generation
+                # PDF Setup
                 buf = io.BytesIO()
                 doc = SimpleDocTemplate(buf, pagesize=A4)
                 img_buf = io.BytesIO(); fig.savefig(img_buf, format='png'); img_buf.seek(0)
                 elements = [Image(img_buf, 4*inch, 4*inch), Spacer(1, 20), Paragraph(report.text.replace('\n', '<br/>'), getSampleStyleSheet()['Normal'])]
                 doc.build(elements)
-                st.download_button("Download PhD Report", data=buf.getvalue(), file_name="Roadmap.pdf", mime="application/pdf")
+                st.download_button("📥 Download Final PhD Report", data=buf.getvalue(), file_name=f"Roadmap_{dob}.pdf", mime="application/pdf")
                 
         except Exception as e:
             st.error(f"System Error: {e}")

@@ -10,6 +10,7 @@ from google import genai
 import json
 from geopy.geocoders import Nominatim
 import io
+import time # Added for retry logic
 
 # PDF Generation
 from reportlab.lib.pagesizes import A4
@@ -44,7 +45,7 @@ def get_planet_dignity(planet, sign):
 # ==========================================
 
 def get_coords(city):
-    geo = Nominatim(user_agent="iron_primer_marital_v1")
+    geo = Nominatim(user_agent="iron_primer_v5_resilient")
     try:
         loc = geo.geocode(city)
         return (loc.latitude, loc.longitude) if loc else (None, None)
@@ -182,25 +183,37 @@ if st.button("Generate Professional Analysis"):
             
             for f in figs: st.pyplot(f)
             
-            # AI Synthesis
+            # --- RESILIENT AI SYNTHESIS (Retry Logic) ---
             client = genai.Client(api_key=api_key)
             prompt = f"""
             PhD Analysis for: The Iron Primer. 
             Context: {prompt_context}
             Analysis Mode: {mode}
             
-            TASK REQUIREMENTS:
-            1. Clinical Pathophysiology: Predict physiological vulnerabilities for both (H6/H8/H12) and suggest precise 'Sattvic' dietary protocols (Phalahar).
-            2. Marriage Longevity Prediction: 
-               - Analyze the 7th house (partnership) and 8th house (longevity of union) inter-relations.
-               - Predict if the marriage would 'survive' based on Mars/Saturn afflictions and Benefic support.
-               - Calculate the 'Stability Index' using both Vedic principles and psychological stability research (e.g. Gottman Method).
-            3. Scientific Grounding: Cite papers (Author, Year) for both health and relationship longevity claims.
-            4. Wisdom: Use Bhagavad Gita (18.14) and Chanakya Niti for marital and personal conduct.
+            TASK:
+            1. Clinical Pathophysiology: Predict physiological vulnerabilities (H6/H8/H12) and suggest 'Sattvic' diet protocols.
+            2. Marriage Longevity: Predict if union survives based on 7th/8th house and 'Stability Index'.
+            3. Scientific Grounding: Cite papers (Author, Year).
+            4. Wisdom: Bhagavad Gita and Chanakya Niti.
             """
-            report = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+            
+            report_text = ""
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    report = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+                    report_text = report.text
+                    break
+                except Exception as e:
+                    if "503" in str(e) and attempt < max_retries - 1:
+                        st.warning(f"Server busy. Retrying in {attempt + 2} seconds...")
+                        time.sleep(attempt + 2)
+                    else:
+                        st.error(f"AI Service Error: {e}")
+                        st.stop()
+
             st.markdown("---")
-            st.markdown(report.text)
+            st.markdown(report_text)
             
             # PDF Generation
             buf = io.BytesIO(); doc = SimpleDocTemplate(buf, pagesize=A4); styles = getSampleStyleSheet(); elements = []
@@ -208,7 +221,7 @@ if st.button("Generate Professional Analysis"):
                 ib = io.BytesIO(); f.savefig(ib, format='png'); ib.seek(0)
                 elements.append(Image(ib, 3.5*inch, 3.5*inch))
             elements.append(Spacer(1, 20))
-            for line in report.text.split('\n'):
+            for line in report_text.split('\n'):
                 if line.strip(): elements.append(Paragraph(line.replace('**', '').strip(), styles['Normal']))
             doc.build(elements)
-            st.download_button("📥 Download PhD Marriage/Health Report", data=buf.getvalue(), file_name="Vedic_Longevity_Report.pdf", mime="application/pdf")
+            st.download_button("📥 Download PhD Report", data=buf.getvalue(), file_name="Vedic_Longevity_Report.pdf", mime="application/pdf")

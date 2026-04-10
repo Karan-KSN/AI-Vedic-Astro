@@ -45,7 +45,7 @@ def get_planet_dignity(planet, sign):
 # ==========================================
 
 def get_coords(city):
-    geolocator = Nominatim(user_agent="iron_primer_research_v13")
+    geolocator = Nominatim(user_agent="iron_primer_research_v14")
     try:
         location = geolocator.geocode(city, timeout=10)
         return (location.latitude, location.longitude) if location else (None, None)
@@ -136,13 +136,13 @@ def draw_chart(data, title="Natal Chart"):
 # 4. STREAMLIT UI & GROQ AI LOGIC
 # ==========================================
 
-st.set_page_config(page_title="The Iron Primer Research", page_icon="🧬")
-st.title("🧬 Vedic Clinical & Marriage Engine (Groq-V13)")
+st.set_page_config(page_title="Iron Primer PhD Engine", page_icon="🧬")
+st.title("🧬 Vedic Clinical, Professional & Marriage Engine")
 
 with st.sidebar:
     st.header("🔑 Engine Access")
     groq_key = st.text_input("Groq API Key", type="password")
-    mode = st.radio("Select Mode", ["Individual Analysis", "Marriage Longevity Analysis"])
+    mode = st.radio("Select Mode", ["Individual Research Analysis", "Marriage & Progeny Analysis"])
 
 st.subheader("👤 Individual 1 Details")
 c1, c2 = st.columns(2)
@@ -153,7 +153,7 @@ with c2:
     tob1 = st.text_input("Time (HH:MM)", value="10:30", key="t1")
     tz1 = st.selectbox("Timezone", ["Asia/Kolkata", "UTC", "America/New_York"], key="z1")
 
-if mode == "Marriage Longevity Analysis":
+if mode == "Marriage & Progeny Analysis":
     st.markdown("---")
     st.subheader("👥 Individual 2 Details")
     cc1, cc2 = st.columns(2)
@@ -167,41 +167,42 @@ if mode == "Marriage Longevity Analysis":
 if st.button("Generate Professional Roadmap"):
     if not groq_key: st.error("Please add Groq API Key.")
     else:
-        with st.spinner("Processing through Groq LPU (Llama 3.3)..."):
+        with st.spinner("Processing through Groq LPU..."):
             d1 = calculate_chart(dob1, tob1, city1, tz1)
-            if isinstance(d1, str): st.error(f"P1: {d1}"); st.stop()
+            if isinstance(d1, str): st.error(f"P1 Error: {d1}"); st.stop()
             
             figs = [draw_chart(d1, "Individual 1 Chart")]
-            prompt_ctx = f"P1: {json.dumps(d1)}"
+            prompt_ctx = f"P1 Data: {json.dumps(d1)}"
             
-            if mode == "Marriage Longevity Analysis":
+            if mode == "Marriage & Progeny Analysis":
                 d2 = calculate_chart(dob2, tob2, city2, tz2)
-                if isinstance(d2, str): st.error(f"P2: {d2}"); st.stop()
+                if isinstance(d2, str): st.error(f"P2 Error: {d2}"); st.stop()
                 figs.append(draw_chart(d2, "Individual 2 Chart"))
-                prompt_ctx += f"\nP2: {json.dumps(d2)}"
+                prompt_ctx += f"\nP2 Data: {json.dumps(d2)}"
             
             for f in figs: st.pyplot(f)
             
-            # --- UPDATED GROQ AI INTEGRATION ---
+            # --- AI SYNTHESIS WITH EXPANDED LOGIC ---
             client = Groq(api_key=groq_key)
             prompt = f"""
-            PhD Analysis for Iron Primer. Data: {prompt_ctx}. Mode: {mode}. 
+            PhD Analysis for Iron Primer Persona. Data: {prompt_ctx}. Mode: {mode}. 
             
-            REQUIREMENTS:
-            1. Clinical Pathophysiology: Predict physiological vulnerabilities based strictly on planetary signatures (Houses 6,8,12 and Dignities). Do NOT ask for SNPs.
-            2. Vedic Nutrition: Provide a personalized 'Sattvic' dietary protocol (Phalahar suggestions, Agni/Water balance focus) for each individual.
-            3. Marriage Longevity: Predict survival likelihood and 'Stability Index' using 7th/8th house strengths.
-            4. Scientific Evidence: Back every clinical claim with citations (Author, Year, Journal).
-            5. Wisdom: Integrate Bhagavad Gita (18.14) and Chanakya Niti for life and relationship management.
+            INSTRUCTIONS:
+            1. Clinical Pathophysiology: Predict physiological vulnerabilities (Houses 6,8,12). Suggest 'Sattvic' nutrition to balance elements.
+            2. Professional Life Blueprint: Analyze the 10th House (Karma Sthan), 1st House (Self), and 2nd House (Wealth) to identify ideal career path, current professional challenges, and financial growth cycles.
+            3. Marriage & Children (if applicable):
+               - Predict marriage longevity and 'Stability Index' (7th/8th house).
+               - Children Analysis: Analyze the 5th House (Progeny/Santana Sthan) for both individuals. Predict the likelihood of offspring, potential challenges, and timing based on current Dasha.
+            4. Scientific Citations: Use Author/Year/Journal citations for clinical and behavioral claims.
+            5. Philosophical Wisdom: Synthesize advice using Bhagavad Gita (18.14) and Chanakya Niti.
             """
             
             try:
-                # Switched to the updated flagship model: llama-3.3-70b-versatile
                 completion = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.6,
-                    max_tokens=3000
+                    max_tokens=3500
                 )
                 final_report = completion.choices[0].message.content
                 
@@ -216,7 +217,7 @@ if st.button("Generate Professional Roadmap"):
                 elements.append(Spacer(1, 20))
                 elements.append(Paragraph(final_report.replace('\n', '<br/>'), styles['Normal']))
                 doc.build(elements)
-                st.download_button("📥 Download PhD Report PDF", data=buf.getvalue(), file_name="Roadmap.pdf", mime="application/pdf")
+                st.download_button("📥 Download Full PhD Report PDF", data=buf.getvalue(), file_name="Roadmap.pdf", mime="application/pdf")
             
             except Exception as e:
                 st.error(f"Groq API Error: {e}")

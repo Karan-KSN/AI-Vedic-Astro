@@ -10,7 +10,7 @@ from google import genai
 import json
 from geopy.geocoders import Nominatim
 import io
-import time # Added for retry logic
+import time
 
 # PDF Generation
 from reportlab.lib.pagesizes import A4
@@ -45,7 +45,7 @@ def get_planet_dignity(planet, sign):
 # ==========================================
 
 def get_coords(city):
-    geo = Nominatim(user_agent="iron_primer_v5_resilient")
+    geo = Nominatim(user_agent="iron_primer_resilient_v6")
     try:
         loc = geo.geocode(city)
         return (loc.latitude, loc.longitude) if loc else (None, None)
@@ -107,7 +107,7 @@ def calculate_chart(dob_str, time_str, city, tz):
     except: return None
 
 # ==========================================
-# 3. VISUALIZATION & PDF
+# 3. VISUALIZATION ENGINE
 # ==========================================
 
 def draw_chart(data, title="Natal Chart"):
@@ -133,7 +133,7 @@ def draw_chart(data, title="Natal Chart"):
     return fig
 
 # ==========================================
-# 4. STREAMLIT INTERFACE
+# 4. STREAMLIT UI
 # ==========================================
 
 st.set_page_config(page_title="Iron Primer Research", page_icon="🧘")
@@ -142,7 +142,7 @@ st.title("🧘 Vedic Marriage & Clinical Engine")
 with st.sidebar:
     st.header("🔑 Engine Key")
     api_key = st.text_input("Gemini API Key", type="password")
-    mode = st.radio("Select Mode", ["Individual Analysis", "Marriage Longevity Analysis"])
+    mode = st.radio("Mode", ["Individual Analysis", "Marriage Longevity Analysis"])
 
 st.subheader("👤 Individual 1 Details")
 c1, c2 = st.columns(2)
@@ -151,7 +151,7 @@ with c1:
     city1 = st.text_input("City", value="Patiala", key="c1")
 with c2:
     tob1 = st.text_input("Time (HH:MM)", value="10:30", key="t1")
-    tz1 = st.selectbox("Timezone", ["Asia/Kolkata", "UTC", "America/New_York"], key="z1")
+    tz1 = st.selectbox("Timezone", ["Asia/Kolkata", "UTC"], key="z1")
 
 data2 = None
 if mode == "Marriage Longevity Analysis":
@@ -168,60 +168,39 @@ if mode == "Marriage Longevity Analysis":
 if st.button("Generate Professional Analysis"):
     if not api_key: st.error("Please add API Key.")
     else:
-        with st.spinner("Processing celestial & psychological metrics..."):
-            data1 = calculate_chart(dob1, tob1, city1, tz1)
-            if not data1: st.error("Check Person 1 inputs."); st.stop()
+        with st.spinner("Processing celestial & clinical metrics..."):
+            d1 = calculate_chart(dob1, tob1, city1, tz1)
+            if not d1: st.error("Check Person 1 inputs."); st.stop()
             
-            figs = [draw_chart(data1, "Individual 1 Natal Chart")]
-            prompt_context = f"Individual 1 Data: {json.dumps(data1)}"
+            figs = [draw_chart(d1, "Person 1 Natal Chart")]
+            ctx = f"Person 1: {json.dumps(d1)}"
             
             if mode == "Marriage Longevity Analysis":
-                data2 = calculate_chart(dob2, tob2, city2, tz2)
-                if data2:
-                    figs.append(draw_chart(data2, "Individual 2 Natal Chart"))
-                    prompt_context += f"\nIndividual 2 Data: {json.dumps(data2)}"
+                d2 = calculate_chart(dob2, tob2, city2, tz2)
+                if d2:
+                    figs.append(draw_chart(d2, "Person 2 Natal Chart"))
+                    ctx += f"\nPerson 2: {json.dumps(d2)}"
             
             for f in figs: st.pyplot(f)
             
-            # --- RESILIENT AI SYNTHESIS (Retry Logic) ---
+            # --- FALLBACK AI LOGIC ---
             client = genai.Client(api_key=api_key)
-            prompt = f"""
-            PhD Analysis for: The Iron Primer. 
-            Context: {prompt_context}
-            Analysis Mode: {mode}
-            
-            TASK:
-            1. Clinical Pathophysiology: Predict physiological vulnerabilities (H6/H8/H12) and suggest 'Sattvic' diet protocols.
-            2. Marriage Longevity: Predict if union survives based on 7th/8th house and 'Stability Index'.
-            3. Scientific Grounding: Cite papers (Author, Year).
-            4. Wisdom: Bhagavad Gita and Chanakya Niti.
-            """
+            prompt = f"PhD Research Analysis for The Iron Primer. Data: {ctx}. Mode: {mode}. Tasks: 1. Clinical Predispositions (Houses 6/8/12). 2. 'Sattvic' nutrition protocol based on elements. 3. Marriage survival prediction & Stability Index. 4. Scientific citations (Author, Year). 5. Bhagavad Gita & Chanakya Niti application."
             
             report_text = ""
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    report = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-                    report_text = report.text
-                    break
-                except Exception as e:
-                    if "503" in str(e) and attempt < max_retries - 1:
-                        st.warning(f"Server busy. Retrying in {attempt + 2} seconds...")
-                        time.sleep(attempt + 2)
-                    else:
-                        st.error(f"AI Service Error: {e}")
-                        st.stop()
-
-            st.markdown("---")
-            st.markdown(report_text)
+            models_to_try = ['gemini-1.5-flash', 'gemini-1.5-pro']
             
-            # PDF Generation
-            buf = io.BytesIO(); doc = SimpleDocTemplate(buf, pagesize=A4); styles = getSampleStyleSheet(); elements = []
-            for f in figs:
-                ib = io.BytesIO(); f.savefig(ib, format='png'); ib.seek(0)
-                elements.append(Image(ib, 3.5*inch, 3.5*inch))
-            elements.append(Spacer(1, 20))
-            for line in report_text.split('\n'):
-                if line.strip(): elements.append(Paragraph(line.replace('**', '').strip(), styles['Normal']))
-            doc.build(elements)
-            st.download_button("📥 Download PhD Report", data=buf.getvalue(), file_name="Vedic_Longevity_Report.pdf", mime="application/pdf")
+            success = False
+            for model_name in models_to_try:
+                for attempt in range(2):
+                    try:
+                        report = client.models.generate_content(model=model_name, contents=prompt)
+                        report_text = report.text
+                        success = True
+                        break
+                    except Exception as e:
+                        if "503" in str(e):
+                            st.warning(f"Model {model_name} busy. Retrying/Switching...")
+                            time.sleep(2)
+                        else:
+                            st.error(f"Error

@@ -6,7 +6,7 @@ import matplotlib.patches as patches
 import swisseph as swe
 import datetime
 import pytz
-from google import genai
+from groq import Groq # Switched from google-genai
 import json
 from geopy.geocoders import Nominatim
 import io
@@ -45,7 +45,7 @@ def get_planet_dignity(planet, sign):
 # ==========================================
 
 def get_coords(city):
-    geolocator = Nominatim(user_agent="iron_primer_v10_final")
+    geolocator = Nominatim(user_agent="iron_primer_groq_v1")
     try:
         location = geolocator.geocode(city, timeout=10)
         return (location.latitude, location.longitude) if location else (None, None)
@@ -133,16 +133,16 @@ def draw_chart(data, title="Natal Chart"):
     return fig
 
 # ==========================================
-# 4. STREAMLIT UI
+# 4. STREAMLIT UI & GROQ AI LOGIC
 # ==========================================
 
-st.set_page_config(page_title="Iron Primer PhD Engine", page_icon="🧘")
-st.title("🧘 Vedic Clinical Research Engine")
+st.set_page_config(page_title="Iron Primer Research", page_icon="🧘")
+st.title("🧘 Vedic Clinical & Marriage Engine (Groq-Speed)")
 
 with st.sidebar:
-    st.header("🔑 Engine Key")
-    api_key = st.text_input("Gemini API Key", type="password")
-    mode = st.radio("Select Mode", ["Individual Health & Life", "Marriage Longevity Analysis"])
+    st.header("🔑 Engine Access")
+    groq_key = st.text_input("Groq API Key", type="password")
+    mode = st.radio("Select Mode", ["Individual Analysis", "Marriage Longevity Analysis"])
 
 st.subheader("👤 Individual 1 Details")
 c1, c2 = st.columns(2)
@@ -164,55 +164,45 @@ if mode == "Marriage Longevity Analysis":
         tob2 = st.text_input("Time (HH:MM)", value="14:15", key="t2")
         tz2 = st.selectbox("Timezone", ["Asia/Kolkata", "UTC"], key="z2")
 
-if st.button("Generate Professional Analysis"):
-    if not api_key: st.error("Please add API Key.")
+if st.button("Generate Professional Roadmap"):
+    if not groq_key: st.error("Please add Groq API Key.")
     else:
-        with st.spinner("Synthesizing Clinical & Celestial Metrics..."):
+        with st.spinner("Processing through Groq LPU..."):
             d1 = calculate_chart(dob1, tob1, city1, tz1)
             if isinstance(d1, str): st.error(f"P1: {d1}"); st.stop()
             
             figs = [draw_chart(d1, "Individual 1 Chart")]
-            prompt_ctx = f"Person 1 Data: {json.dumps(d1)}"
+            prompt_ctx = f"P1: {json.dumps(d1)}"
             
             if mode == "Marriage Longevity Analysis":
                 d2 = calculate_chart(dob2, tob2, city2, tz2)
                 if isinstance(d2, str): st.error(f"P2: {d2}"); st.stop()
                 figs.append(draw_chart(d2, "Individual 2 Chart"))
-                prompt_ctx += f"\nPerson 2 Data: {json.dumps(d2)}"
+                prompt_ctx += f"\nP2: {json.dumps(d2)}"
             
             for f in figs: st.pyplot(f)
             
-            # --- RESILIENT AI BRAIN ---
-            client = genai.Client(api_key=api_key)
+            # --- GROQ AI INTEGRATION ---
+            client = Groq(api_key=groq_key)
             prompt = f"""
-            Analyze as a PhD Researcher in Nutrigenetics and Vedic Expert for: The Iron Primer.
-            Data Context: {prompt_ctx}
-            Mode: {mode}
-
-            TASK:
-            1. Clinical Pathology: Identify physiological vulnerabilities (H6/H8/H12) like Agni (digestive fire), Bone Density, or Inflammation.
-            2. Personalized Diet: Suggest specific 'Sattvic' foods and Phalahar protocols to balance these signatures.
-            3. Marriage Longevity (if applicable): Predict union survival based on 7th/8th house strengths and provide a 'Stability Index'.
-            4. Scientific Citations: Back patterns with literature (Author, Year).
-            5. Wisdom: Integrate Bhagavad Gita (18.14) and Chanakya Niti.
+            PhD Analysis for Iron Primer. Data: {prompt_ctx}. Mode: {mode}. 
+            1. Clinical Pathophysiology (Houses 6,8,12 and Dignities). 
+            2. Phalahar/Sattvic nutrition to balance fire/water elements in the chart. 
+            3. Marriage survival prediction (7th/8th house longevity). 
+            4. Scientific citations (Author, Year, Journal) for biological patterns. 
+            5. Bhagavad Gita (18.14) & Chanakya Niti application.
             """
             
-            final_report = ""
-            # Standardizing to Gemini 2.0-Flash (Stable for 2026)
-            for attempt in range(4):
-                try:
-                    res = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
-                    final_report = res.text
-                    break
-                except Exception as e:
-                    if "503" in str(e) or "404" in str(e):
-                        st.warning(f"Connection attempt {attempt+1} failed. Retrying...")
-                        time.sleep(2)
-                    else:
-                        st.error(f"API Error: {e}")
-                        st.stop()
-            
-            if final_report:
+            try:
+                # Using Llama 3 70B for high-quality PhD reasoning
+                completion = client.chat.completions.create(
+                    model="llama3-70b-8192",
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.7,
+                    max_tokens=2048
+                )
+                final_report = completion.choices[0].message.content
+                
                 st.markdown("---")
                 st.markdown(final_report)
                 
@@ -224,6 +214,7 @@ if st.button("Generate Professional Analysis"):
                 elements.append(Spacer(1, 20))
                 elements.append(Paragraph(final_report.replace('\n', '<br/>'), styles['Normal']))
                 doc.build(elements)
-                st.download_button("📥 Download Report PDF", data=buf.getvalue(), file_name="Roadmap.pdf", mime="application/pdf")
-            else:
-                st.error("AI servers are unavailable. Try again in 1 minute.")
+                st.download_button("📥 Download PhD Report PDF", data=buf.getvalue(), file_name="Roadmap.pdf", mime="application/pdf")
+            
+            except Exception as e:
+                st.error(f"Groq API Error: {e}")

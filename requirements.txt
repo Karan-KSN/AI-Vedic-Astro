@@ -1,7 +1,7 @@
 streamlit
 pyswisseph
 pytz
-google-genai
+groq
 geopy
 matplotlib
 reportlab

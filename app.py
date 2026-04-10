@@ -19,11 +19,12 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 
 # ==========================================
-# 1. CORE MATH & DIGNITY LOGIC
+# 1. CORE MATH & DASHAS
 # ==========================================
 
 SIGNS = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
-LORDS = {"Aries": "Mars", "Taurus": "Venus", "Gemini": "Mercury", "Cancer": "Moon", "Leo": "Sun", "Virgo": "Mercury", "Libra": "Venus", "Scorpio": "Mars", "Sagittarius": "Jupiter", "Capricorn": "Saturn", "Aquarius": "Saturn", "Pisces": "Jupiter"}
+DASHA_ORDER = ["Ketu", "Venus", "Sun", "Moon", "Mars", "Rahu", "Jupiter", "Saturn", "Mercury"]
+DASHA_YRS = {"Ketu": 7, "Venus": 20, "Sun": 6, "Moon": 10, "Mars": 7, "Rahu": 18, "Jupiter": 16, "Saturn": 19, "Mercury": 17}
 
 def get_planet_dignity(planet, sign):
     dignities = {
@@ -36,45 +37,68 @@ def get_planet_dignity(planet, sign):
         "Saturn": {"Ex": "Libra", "Deb": "Aries"}
     }
     if planet in dignities:
-        if sign == dignities[planet]["Ex"]: return "Exalted (Uchcha)"
-        if sign == dignities[planet]["Deb"]: return "Debilitated (Neecha)"
+        if sign == dignities[planet]["Ex"]: return "Exalted"
+        if sign == dignities[planet]["Deb"]: return "Debilitated"
     return "Neutral"
 
+def get_detailed_dasha(moon_lon, dob):
+    """Calculates Mahadasha and Antardasha for grounding the AI."""
+    # Total cycle 120 years
+    nak_span = 360/27
+    nak_idx = int(moon_lon / nak_span)
+    # Starting Lord
+    start_lord_idx = nak_idx % 9
+    
+    # Calculate balance at birth
+    rem_in_nak = ( (nak_idx + 1) * nak_span ) - moon_lon
+    perc_rem = rem_in_nak / nak_span
+    
+    # Time passed since birth
+    now = datetime.datetime.now()
+    diff = now.year - dob.year + (now.month - dob.month)/12.0
+    
+    # Find current Mahadasha
+    curr_idx = start_lord_idx
+    balance = perc_rem * DASHA_YRS[DASHA_ORDER[curr_idx]]
+    
+    elapsed = 0
+    if diff < balance:
+        m_lord = DASHA_ORDER[curr_idx]
+        m_start = 0
+    else:
+        elapsed = balance
+        curr_idx = (curr_idx + 1) % 9
+        while elapsed + DASHA_YRS[DASHA_ORDER[curr_idx]] < diff:
+            elapsed += DASHA_YRS[DASHA_ORDER[curr_idx]]
+            curr_idx = (curr_idx + 1) % 9
+        m_lord = DASHA_ORDER[curr_idx]
+        m_start = elapsed
+
+    # Find current Antardasha within Mahadasha
+    m_total = DASHA_YRS[m_lord]
+    time_into_m = diff - m_start
+    
+    a_idx = DASHA_ORDER.index(m_lord)
+    a_elapsed = 0
+    for i in range(9):
+        current_a_lord = DASHA_ORDER[(a_idx + i) % 9]
+        # Antardasha span = (M_yrs * A_yrs) / 120
+        a_span = (m_total * DASHA_YRS[current_a_lord]) / 120.0
+        if a_elapsed + a_span > time_into_m:
+            return {"Mahadasha": m_lord, "Antardasha": current_a_lord, "YearsIntoM": round(time_into_m, 2)}
+        a_elapsed += a_span
+    return {"Mahadasha": m_lord, "Antardasha": "Unknown"}
+
 # ==========================================
-# 2. ASTRONOMICAL ENGINE
+# 2. CALCULATION ENGINE
 # ==========================================
 
 def get_coords(city):
-    geolocator = Nominatim(user_agent="iron_primer_research_v14")
+    geolocator = Nominatim(user_agent="iron_primer_v15")
     try:
         location = geolocator.geocode(city, timeout=10)
         return (location.latitude, location.longitude) if location else (None, None)
     except: return (None, None)
-
-def get_dasha_data(moon_lon, dob):
-    nakshatras = [
-        ("Ashwini", "Ketu", 7), ("Bharani", "Venus", 20), ("Krittika", "Sun", 6),
-        ("Rohini", "Moon", 10), ("Mrigashira", "Mars", 7), ("Ardra", "Rahu", 18),
-        ("Punarvasu", "Jupiter", 16), ("Pushya", "Saturn", 19), ("Ashlesha", "Mercury", 17),
-        ("Magha", "Ketu", 7), ("Purva Phalguni", "Venus", 20), ("Uttara Phalguni", "Sun", 6),
-        ("Hasta", "Moon", 10), ("Chitra", "Mars", 7), ("Swati", "Rahu", 18),
-        ("Vishakha", "Jupiter", 16), ("Anuradha", "Saturn", 19), ("Jyeshtha", "Mercury", 17),
-        ("Mula", "Ketu", 7), ("Purva Ashadha", "Venus", 20), ("Uttara Ashadha", "Sun", 6),
-        ("Shravana", "Moon", 10), ("Dhanishta", "Mars", 7), ("Shatabhisha", "Rahu", 18),
-        ("Purva Bhadrapada", "Jupiter", 16), ("Uttara Bhadrapada", "Saturn", 19), ("Revati", "Mercury", 17)
-    ]
-    idx = int(moon_lon / (360/27))
-    lord, yrs = nakshatras[idx][1], nakshatras[idx][2]
-    bal = (( (360/27) - (moon_lon % (360/27)) ) / (360/27)) * yrs
-    order = ["Ketu", "Venus", "Sun", "Moon", "Mars", "Rahu", "Jupiter", "Saturn", "Mercury"]
-    d_yrs = {"Ketu": 7, "Venus": 20, "Sun": 6, "Moon": 10, "Mars": 7, "Rahu": 18, "Jupiter": 16, "Saturn": 19, "Mercury": 17}
-    age = (datetime.datetime.now().year - dob.year)
-    d_idx = order.index(lord)
-    cumul = bal
-    while cumul < age:
-        d_idx = (d_idx + 1) % 9
-        cumul += d_yrs[order[d_idx]]
-    return order[d_idx]
 
 def calculate_chart(dob_str, time_str, city, tz):
     try:
@@ -102,19 +126,19 @@ def calculate_chart(dob_str, time_str, city, tz):
             if b != "Ascendant":
                 p_idx = SIGNS.index(data[b]["Sign"])
                 data[b]["House"] = ((p_idx - a_idx) % 12) + 1
-        data["Dasha"] = get_dasha_data(data["Moon"]["Lon"], datetime.date(y, m, d))
+        data["DashaLevels"] = get_detailed_dasha(data["Moon"]["Lon"], datetime.date(y, m, d))
         return data
     except Exception as e: return f"ERROR: {str(e)}"
 
 # ==========================================
-# 3. VISUALIZATION ENGINE
+# 3. VISUALIZATION
 # ==========================================
 
 def draw_chart(data, title="Natal Chart"):
     p_by_h = {i: [] for i in range(1, 13)}
     l_idx = SIGNS.index(data["Ascendant"]["Sign"]) + 1
     for b, d in data.items():
-        if b not in ["Ascendant", "Dasha"]: p_by_h[d["House"]].append(b[:3] if b not in ["Rahu", "Ketu"] else b)
+        if b not in ["Ascendant", "DashaLevels"]: p_by_h[d["House"]].append(b[:3] if b not in ["Rahu", "Ketu"] else b)
     fig, ax = plt.subplots(figsize=(5, 5), facecolor='#fdfcf5')
     ax.set_xlim(0, 10); ax.set_ylim(0, 10); ax.axis('off')
     lp = {'color': '#4a4a4a', 'linewidth': 1.5}
@@ -133,11 +157,11 @@ def draw_chart(data, title="Natal Chart"):
     return fig
 
 # ==========================================
-# 4. STREAMLIT UI & GROQ AI LOGIC
+# 4. STREAMLIT UI & AI LOGIC
 # ==========================================
 
-st.set_page_config(page_title="Iron Primer PhD Engine", page_icon="🧬")
-st.title("🧬 Vedic Clinical, Professional & Marriage Engine")
+st.set_page_config(page_title="Iron Primer Expert Engine", page_icon="🧘")
+st.title("🧘 Vedic Life, Professional & Progeny Engine")
 
 with st.sidebar:
     st.header("🔑 Engine Access")
@@ -151,7 +175,7 @@ with c1:
     city1 = st.text_input("City", value="Patiala", key="c1")
 with c2:
     tob1 = st.text_input("Time (HH:MM)", value="10:30", key="t1")
-    tz1 = st.selectbox("Timezone", ["Asia/Kolkata", "UTC", "America/New_York"], key="z1")
+    tz1 = st.selectbox("Timezone", ["Asia/Kolkata", "UTC"], key="z1")
 
 if mode == "Marriage & Progeny Analysis":
     st.markdown("---")
@@ -164,10 +188,10 @@ if mode == "Marriage & Progeny Analysis":
         tob2 = st.text_input("Time (HH:MM)", value="14:15", key="t2")
         tz2 = st.selectbox("Timezone", ["Asia/Kolkata", "UTC"], key="z2")
 
-if st.button("Generate Professional Roadmap"):
+if st.button("Generate Professional Analysis"):
     if not groq_key: st.error("Please add Groq API Key.")
     else:
-        with st.spinner("Processing through Groq LPU..."):
+        with st.spinner("Processing deep celestial cycles..."):
             d1 = calculate_chart(dob1, tob1, city1, tz1)
             if isinstance(d1, str): st.error(f"P1 Error: {d1}"); st.stop()
             
@@ -182,19 +206,22 @@ if st.button("Generate Professional Roadmap"):
             
             for f in figs: st.pyplot(f)
             
-            # --- AI SYNTHESIS WITH EXPANDED LOGIC ---
+            # --- AI SYNTHESIS WITH DASHAS & DEPTH ---
             client = Groq(api_key=groq_key)
             prompt = f"""
-            PhD Analysis for Iron Primer Persona. Data: {prompt_ctx}. Mode: {mode}. 
+            Analyze as a PhD Researcher & Vedic Expert. Data Context: {prompt_ctx}. Current Date: {datetime.datetime.now()}.
             
             INSTRUCTIONS:
-            1. Clinical Pathophysiology: Predict physiological vulnerabilities (Houses 6,8,12). Suggest 'Sattvic' nutrition to balance elements.
-            2. Professional Life Blueprint: Analyze the 10th House (Karma Sthan), 1st House (Self), and 2nd House (Wealth) to identify ideal career path, current professional challenges, and financial growth cycles.
-            3. Marriage & Children (if applicable):
-               - Predict marriage longevity and 'Stability Index' (7th/8th house).
-               - Children Analysis: Analyze the 5th House (Progeny/Santana Sthan) for both individuals. Predict the likelihood of offspring, potential challenges, and timing based on current Dasha.
-            4. Scientific Citations: Use Author/Year/Journal citations for clinical and behavioral claims.
-            5. Philosophical Wisdom: Synthesize advice using Bhagavad Gita (18.14) and Chanakya Niti.
+            1. **Vimshottari Dasha Analysis:** Provide a sequential analysis considering Mahadasha, Antardasha, and extrapolate Pratyantar, Sookshm, and Prana dashas based on the current date for the individual(s). Explain how these overlapping cycles affect current life events.
+            2. **Marriage Life Depth:** - Detailed 7th house and its lord analysis.
+               - Check for Mangal Dosha (Kuja Dosha) and its cancellation.
+               - Stability index based on 'Bhakoot' and 'Gana' themes.
+            3. **Children (Progeny) Depth:**
+               - 5th House (Santana Sthan) lord strength.
+               - Role of Jupiter (Putrakaraka). 
+               - Discuss themes of the Saptamsha (D7) potential and timing of progeny during the current dasha cycles.
+            4. **Professional & Clinical:** karmic career path (10th house) and physiological vulnerabilities (6/8/12).
+            5. **Citations & Wisdom:** Back behavioral/clinical claims with literature (Author, Year). Integrate Bhagavad Gita (18.14) and Chanakya Niti.
             """
             
             try:
@@ -202,10 +229,9 @@ if st.button("Generate Professional Roadmap"):
                     model="llama-3.3-70b-versatile",
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.6,
-                    max_tokens=3500
+                    max_tokens=4000
                 )
                 final_report = completion.choices[0].message.content
-                
                 st.markdown("---")
                 st.markdown(final_report)
                 
@@ -217,7 +243,5 @@ if st.button("Generate Professional Roadmap"):
                 elements.append(Spacer(1, 20))
                 elements.append(Paragraph(final_report.replace('\n', '<br/>'), styles['Normal']))
                 doc.build(elements)
-                st.download_button("📥 Download Full PhD Report PDF", data=buf.getvalue(), file_name="Roadmap.pdf", mime="application/pdf")
-            
-            except Exception as e:
-                st.error(f"Groq API Error: {e}")
+                st.download_button("📥 Download PhD Report", data=buf.getvalue(), file_name="Roadmap.pdf", mime="application/pdf")
+            except Exception as e: st.error(f"Groq API Error: {e}")

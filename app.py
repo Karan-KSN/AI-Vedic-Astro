@@ -45,7 +45,7 @@ def get_planet_dignity(planet, sign):
 # ==========================================
 
 def get_coords(city):
-    geo = Nominatim(user_agent="iron_primer_resilient_v6")
+    geo = Nominatim(user_agent="iron_primer_research_v7")
     try:
         loc = geo.geocode(city)
         return (loc.latitude, loc.longitude) if loc else (None, None)
@@ -140,9 +140,9 @@ st.set_page_config(page_title="Iron Primer Research", page_icon="🧘")
 st.title("🧘 Vedic Marriage & Clinical Engine")
 
 with st.sidebar:
-    st.header("🔑 Engine Key")
+    st.header("🔑 Authentication")
     api_key = st.text_input("Gemini API Key", type="password")
-    mode = st.radio("Mode", ["Individual Analysis", "Marriage Longevity Analysis"])
+    mode = st.radio("Analysis Mode", ["Individual Health & Life", "Marriage Longevity Analysis"])
 
 st.subheader("👤 Individual 1 Details")
 c1, c2 = st.columns(2)
@@ -151,7 +151,7 @@ with c1:
     city1 = st.text_input("City", value="Patiala", key="c1")
 with c2:
     tob1 = st.text_input("Time (HH:MM)", value="10:30", key="t1")
-    tz1 = st.selectbox("Timezone", ["Asia/Kolkata", "UTC"], key="z1")
+    tz1 = st.selectbox("Timezone", ["Asia/Kolkata", "UTC", "America/New_York"], key="z1")
 
 data2 = None
 if mode == "Marriage Longevity Analysis":
@@ -165,42 +165,18 @@ if mode == "Marriage Longevity Analysis":
         tob2 = st.text_input("Time (HH:MM)", value="14:15", key="t2")
         tz2 = st.selectbox("Timezone", ["Asia/Kolkata", "UTC"], key="z2")
 
-if st.button("Generate Professional Analysis"):
-    if not api_key: st.error("Please add API Key.")
+if st.button("Generate Professional Roadmap"):
+    if not api_key:
+        st.error("⚠️ Please enter your API Key in the sidebar.")
     else:
-        with st.spinner("Processing celestial & clinical metrics..."):
+        with st.spinner("Calculating celestial & physiological metrics..."):
             d1 = calculate_chart(dob1, tob1, city1, tz1)
-            if not d1: st.error("Check Person 1 inputs."); st.stop()
+            if not d1: st.error("❌ Check inputs for Individual 1."); st.stop()
             
-            figs = [draw_chart(d1, "Person 1 Natal Chart")]
-            ctx = f"Person 1: {json.dumps(d1)}"
+            figs = [draw_chart(d1, "Individual 1 Natal Chart")]
+            ctx = f"Person 1 Data: {json.dumps(d1)}"
             
             if mode == "Marriage Longevity Analysis":
                 d2 = calculate_chart(dob2, tob2, city2, tz2)
-                if d2:
-                    figs.append(draw_chart(d2, "Person 2 Natal Chart"))
-                    ctx += f"\nPerson 2: {json.dumps(d2)}"
-            
-            for f in figs: st.pyplot(f)
-            
-            # --- FALLBACK AI LOGIC ---
-            client = genai.Client(api_key=api_key)
-            prompt = f"PhD Research Analysis for The Iron Primer. Data: {ctx}. Mode: {mode}. Tasks: 1. Clinical Predispositions (Houses 6/8/12). 2. 'Sattvic' nutrition protocol based on elements. 3. Marriage survival prediction & Stability Index. 4. Scientific citations (Author, Year). 5. Bhagavad Gita & Chanakya Niti application."
-            
-            report_text = ""
-            models_to_try = ['gemini-1.5-flash', 'gemini-1.5-pro']
-            
-            success = False
-            for model_name in models_to_try:
-                for attempt in range(2):
-                    try:
-                        report = client.models.generate_content(model=model_name, contents=prompt)
-                        report_text = report.text
-                        success = True
-                        break
-                    except Exception as e:
-                        if "503" in str(e):
-                            st.warning(f"Model {model_name} busy. Retrying/Switching...")
-                            time.sleep(2)
-                        else:
-                            st.error(f"Error
+                if not d2: st.error("❌ Check inputs for Individual 2."); st.stop()
+                figs

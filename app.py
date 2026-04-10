@@ -6,7 +6,7 @@ import matplotlib.patches as patches
 import swisseph as swe
 import datetime
 import pytz
-from groq import Groq # Switched from google-genai
+from groq import Groq
 import json
 from geopy.geocoders import Nominatim
 import io
@@ -45,7 +45,7 @@ def get_planet_dignity(planet, sign):
 # ==========================================
 
 def get_coords(city):
-    geolocator = Nominatim(user_agent="iron_primer_groq_v1")
+    geolocator = Nominatim(user_agent="iron_primer_research_v13")
     try:
         location = geolocator.geocode(city, timeout=10)
         return (location.latitude, location.longitude) if location else (None, None)
@@ -136,8 +136,8 @@ def draw_chart(data, title="Natal Chart"):
 # 4. STREAMLIT UI & GROQ AI LOGIC
 # ==========================================
 
-st.set_page_config(page_title="Iron Primer Research", page_icon="🧘")
-st.title("🧘 Vedic Clinical & Marriage Engine (Groq-Speed)")
+st.set_page_config(page_title="The Iron Primer Research", page_icon="🧬")
+st.title("🧬 Vedic Clinical & Marriage Engine (Groq-V13)")
 
 with st.sidebar:
     st.header("🔑 Engine Access")
@@ -167,7 +167,7 @@ if mode == "Marriage Longevity Analysis":
 if st.button("Generate Professional Roadmap"):
     if not groq_key: st.error("Please add Groq API Key.")
     else:
-        with st.spinner("Processing through Groq LPU..."):
+        with st.spinner("Processing through Groq LPU (Llama 3.3)..."):
             d1 = calculate_chart(dob1, tob1, city1, tz1)
             if isinstance(d1, str): st.error(f"P1: {d1}"); st.stop()
             
@@ -182,24 +182,26 @@ if st.button("Generate Professional Roadmap"):
             
             for f in figs: st.pyplot(f)
             
-            # --- GROQ AI INTEGRATION ---
+            # --- UPDATED GROQ AI INTEGRATION ---
             client = Groq(api_key=groq_key)
             prompt = f"""
             PhD Analysis for Iron Primer. Data: {prompt_ctx}. Mode: {mode}. 
-            1. Clinical Pathophysiology (Houses 6,8,12 and Dignities). 
-            2. Phalahar/Sattvic nutrition to balance fire/water elements in the chart. 
-            3. Marriage survival prediction (7th/8th house longevity). 
-            4. Scientific citations (Author, Year, Journal) for biological patterns. 
-            5. Bhagavad Gita (18.14) & Chanakya Niti application.
+            
+            REQUIREMENTS:
+            1. Clinical Pathophysiology: Predict physiological vulnerabilities based strictly on planetary signatures (Houses 6,8,12 and Dignities). Do NOT ask for SNPs.
+            2. Vedic Nutrition: Provide a personalized 'Sattvic' dietary protocol (Phalahar suggestions, Agni/Water balance focus) for each individual.
+            3. Marriage Longevity: Predict survival likelihood and 'Stability Index' using 7th/8th house strengths.
+            4. Scientific Evidence: Back every clinical claim with citations (Author, Year, Journal).
+            5. Wisdom: Integrate Bhagavad Gita (18.14) and Chanakya Niti for life and relationship management.
             """
             
             try:
-                # Using Llama 3 70B for high-quality PhD reasoning
+                # Switched to the updated flagship model: llama-3.3-70b-versatile
                 completion = client.chat.completions.create(
-                    model="llama3-70b-8192",
+                    model="llama-3.3-70b-versatile",
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=0.7,
-                    max_tokens=2048
+                    temperature=0.6,
+                    max_tokens=3000
                 )
                 final_report = completion.choices[0].message.content
                 

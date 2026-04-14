@@ -11,11 +11,48 @@ import json
 from geopy.geocoders import Nominatim, ArcGIS
 import io
 import time
+import os
+import urllib.request
+import re
+
+# PDF Generation
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.units import inch
+
+# ==========================================
+# 0. HINDI PDF FONT ENGINE
+# ==========================================
+def setup_hindi_font():
+    """Downloads and registers a Google Font for Hindi PDF rendering to prevent crashes."""
+    font_path = "NotoSansDevanagari-Regular.ttf"
+    font_url = "https://raw.githubusercontent.com/googlefonts/noto-fonts/main/unhinted/ttf/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf"
+    
+    if not os.path.exists(font_path):
+        try:
+            urllib.request.urlretrieve(font_url, font_path)
+        except Exception as e:
+            return False
+    try:
+        pdfmetrics.registerFont(TTFont('HindiFont', font_path))
+        return True
+    except:
+        return False
+
+def format_text_for_pdf(text):
+    """Converts basic Markdown to ReportLab XML format."""
+    text = text.replace('<', '&lt;').replace('>', '&gt;')
+    text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text) # Convert bold
+    text = re.sub(r'\*(.*?)\*', r'<i>\1</i>', text)     # Convert italics
+    text = re.sub(r'#(.*?)\n', r'<b>\1</b>\n', text)    # Convert headers
+    return text
 
 # ==========================================
 # 1. SCIENTIFIC-VEDIC CONSTANTS & NAKSHATRAS
 # ==========================================
-
 SIGNS = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
 DASHA_ORDER = ["Ketu", "Venus", "Sun", "Moon", "Mars", "Rahu", "Jupiter", "Saturn", "Mercury"]
 DASHA_YRS = {"Ketu": 7, "Venus": 20, "Sun": 6, "Moon": 10, "Mars": 7, "Rahu": 18, "Jupiter": 16, "Saturn": 19, "Mercury": 17}
@@ -23,12 +60,9 @@ NAKSHATRAS = ["Ashwini", "Bharani", "Krittika", "Rohini", "Mrigashira", "Ardra",
 
 def get_planet_dignity(planet, sign):
     dignities = {
-        "Sun": {"Ex": "Aries", "Deb": "Libra"},
-        "Moon": {"Ex": "Taurus", "Deb": "Scorpio"},
-        "Mars": {"Ex": "Capricorn", "Deb": "Cancer"},
-        "Mercury": {"Ex": "Virgo", "Deb": "Pisces"},
-        "Jupiter": {"Ex": "Cancer", "Deb": "Capricorn"},
-        "Venus": {"Ex": "Pisces", "Deb": "Virgo"},
+        "Sun": {"Ex": "Aries", "Deb": "Libra"}, "Moon": {"Ex": "Taurus", "Deb": "Scorpio"},
+        "Mars": {"Ex": "Capricorn", "Deb": "Cancer"}, "Mercury": {"Ex": "Virgo", "Deb": "Pisces"},
+        "Jupiter": {"Ex": "Cancer", "Deb": "Capricorn"}, "Venus": {"Ex": "Pisces", "Deb": "Virgo"},
         "Saturn": {"Ex": "Libra", "Deb": "Aries"}
     }
     if planet in dignities:
@@ -37,28 +71,22 @@ def get_planet_dignity(planet, sign):
     return "Neutral"
 
 def get_nakshatra_pada(lon):
-    """Calculates exact Nakshatra and Pada for precise Guna Milan."""
-    nak_span = 360 / 27
-    pada_span = nak_span / 4
+    nak_span = 360 / 27; pada_span = nak_span / 4
     nak_idx = int(lon / nak_span)
-    rem = lon % nak_span
-    pada = int(rem / pada_span) + 1
+    pada = int((lon % nak_span) / pada_span) + 1
     return {"Nakshatra": NAKSHATRAS[nak_idx], "Pada": pada}
 
 # ==========================================
 # 2. TEMPORAL PRECISION ENGINE (DASHAS)
 # ==========================================
-
 def get_detailed_dasha(moon_lon, dob):
     nak_span = 360/27
     nak_idx = int(moon_lon / nak_span)
     start_lord_idx = nak_idx % 9
     rem_in_nak = ((nak_idx + 1) * nak_span) - moon_lon
     perc_rem = rem_in_nak / nak_span
-    
     now = datetime.datetime.now()
     diff = now.year - dob.year + (now.month - dob.month)/12.0
-    
     curr_idx = start_lord_idx
     balance = perc_rem * DASHA_YRS[DASHA_ORDER[curr_idx]]
     
@@ -90,57 +118,30 @@ def get_detailed_dasha(moon_lon, dob):
 # ==========================================
 # 3. ROBUST ASTRONOMICAL CALCULATION
 # ==========================================
-
 def get_coords(city):
-    """
-    Bulletproof coordinate finder with a 3-Tier System:
-    1. Local DB (Instant)
-    2. ArcGIS (Enterprise, Cloud-Stable)
-    3. Nominatim (OSM Fallback)
-    """
+    """3-Tier Geocoder: Local DB -> ArcGIS -> Nominatim (Solves CITY_ERR)"""
     city_clean = city.lower().strip()
-    
-    # TIER 1: THE LOCAL CACHE (0.001s response time)
     local_db = {
-        "patiala": (30.3398, 76.3869),
-        "chandigarh": (30.7333, 76.7794),
-        "mohali": (30.7046, 76.7179),
-        "sangrur": (30.2458, 75.8421),
-        "ludhiana": (30.9009, 75.8572),
-        "jalandhar": (31.3260, 75.5761),
-        "amritsar": (31.6340, 74.8723),
-        "new delhi": (28.6139, 77.2090),
-        "delhi": (28.6139, 77.2090),
-        "mumbai": (19.0760, 72.8777),
-        "bangalore": (12.9716, 77.5946)
+        "patiala": (30.3398, 76.3869), "chandigarh": (30.7333, 76.7794),
+        "mohali": (30.7046, 76.7179), "sangrur": (30.2458, 75.8421),
+        "ludhiana": (30.9009, 75.8572), "jalandhar": (31.3260, 75.5761),
+        "amritsar": (31.6340, 74.8723), "new delhi": (28.6139, 77.2090),
+        "delhi": (28.6139, 77.2090), "mumbai": (19.0760, 72.8777)
     }
-    
-    if city_clean in local_db:
-        return local_db[city_clean]
+    if city_clean in local_db: return local_db[city_clean]
         
-    # TIER 2: ArcGIS (Extremely stable on Streamlit Cloud, no API key needed)
     try:
-        arc_geolocator = ArcGIS(timeout=10)
-        location = arc_geolocator.geocode(city)
-        if location:
-            return (location.latitude, location.longitude)
-    except Exception as e:
-        pass # Silently fall through to Tier 3 if ArcGIS fails
+        arc = ArcGIS(timeout=10)
+        loc = arc.geocode(city)
+        if loc: return (loc.latitude, loc.longitude)
+    except: pass
 
-    # TIER 3: Nominatim (The original fallback)
-    import time
-    user_agents = ["iron_primer_v20_global", "phd_research_node_alpha"]
-    for ua in user_agents:
-        try:
-            nom_geolocator = Nominatim(user_agent=ua)
-            location = nom_geolocator.geocode(city, timeout=10)
-            if location:
-                return (location.latitude, location.longitude)
-        except:
-            time.sleep(1)
-            continue
-            
-    # If all 3 tiers fail
+    try:
+        nom = Nominatim(user_agent="iron_primer_v20", timeout=10)
+        loc = nom.geocode(city)
+        if loc: return (loc.latitude, loc.longitude)
+    except: pass
+    
     return (None, None)
 
 def calculate_chart(dob_str, time_str, city, tz):
@@ -182,7 +183,6 @@ def calculate_chart(dob_str, time_str, city, tz):
 # ==========================================
 # 4. DASHBOARD VISUALIZATION
 # ==========================================
-
 def draw_chart(data, title="Celestial Matrix"):
     p_by_h = {i: [] for i in range(1, 13)}
     l_idx = SIGNS.index(data["Ascendant"]["Sign"]) + 1
@@ -206,24 +206,22 @@ def draw_chart(data, title="Celestial Matrix"):
     return fig
 
 # ==========================================
-# 5. STREAMLIT CORE UI
+# 5. STREAMLIT CORE UI & PDF EXPORT
 # ==========================================
-
 st.set_page_config(page_title="Iron Primer PhD Engine", page_icon="🧬", layout="wide")
-st.title("🧬 Scientific-Vedic Bilingual Deep Engine")
+st.title("🧬 Scientific-Vedic Bilingual Engine (PDF Native)")
 st.markdown("---")
 
 with st.sidebar:
     st.header("🔑 Engine Access")
     groq_key = st.text_input("Groq API Key", type="password")
     mode = st.radio("Select Analysis Protocol", ["Individual Bio-Audit", "Marriage & Progeny Sync"])
-    st.info("High-Precision Mode: Offline Coords & Ashtakoota Enabled")
 
 c1, c2 = st.columns(2)
 with c1:
     st.subheader("👤 Individual 1")
     dob1 = st.text_input("Birth Date (DD-MM-YYYY)", value="15-08-1990", key="d1")
-    city1 = st.text_input("Birth City", value="Patiala", key="c1")
+    city1 = st.text_input("Birth City", value="Sangrur", key="c1")
     tob1 = st.text_input("Birth Time (HH:MM)", value="10:30", key="t1")
     tz1 = st.selectbox("Local Timezone", ["Asia/Kolkata", "UTC", "America/New_York"], key="z1")
 
@@ -235,21 +233,19 @@ if mode == "Marriage & Progeny Sync":
         tob2 = st.text_input("Birth Time (HH:MM)", value="14:15", key="t2")
         tz2 = st.selectbox("Local Timezone", ["Asia/Kolkata", "UTC"], key="z2")
 
-if st.button("🚀 Generate Exhaustive Multilingual Report"):
+if st.button("🚀 Generate PDF & Dashboard Report"):
     if not groq_key: st.error("Add Groq API Key.")
     else:
-        with st.spinner("Calculating Sub-Divisional Arrays and Guna Milan..."):
+        with st.spinner("Calculating Arrays & Generating English Analytics..."):
             d1 = calculate_chart(dob1, tob1, city1, tz1)
-            if d1 == "CITY_ERR": st.error(f"❌ Could not locate city: {city1}. Try 'Patiala' or 'Chandigarh'."); st.stop()
-            elif isinstance(d1, str) and "ERROR" in d1: st.error(f"P1: {d1}"); st.stop()
+            if d1 == "CITY_ERR": st.error(f"❌ Could not locate city: {city1}."); st.stop()
             
             figs = [draw_chart(d1, "Individual 1 Celestial Matrix")]
             prompt_ctx = f"P1 Data: {json.dumps(d1)}"
             
             if mode == "Marriage & Progeny Sync":
                 d2 = calculate_chart(dob2, tob2, city2, tz2)
-                if d2 == "CITY_ERR": st.error(f"❌ Could not locate city: {city2}. Try 'Patiala' or 'Chandigarh'."); st.stop()
-                elif isinstance(d2, str) and "ERROR" in d2: st.error(f"P2: {d2}"); st.stop()
+                if d2 == "CITY_ERR": st.error(f"❌ Could not locate city: {city2}."); st.stop()
                 figs.append(draw_chart(d2, "Partner Celestial Matrix"))
                 prompt_ctx += f"\nP2 Data: {json.dumps(d2)}"
             
@@ -259,54 +255,75 @@ if st.button("🚀 Generate Exhaustive Multilingual Report"):
                 with cc2: st.pyplot(figs[1])
             
             client = Groq(api_key=groq_key)
-            prompt = f"""
-            Role: PhD Research Scientist & Vedic Astrologer (Persona: The Iron Primer).
-            Current Date: {datetime.datetime.now()}. Matrix: {prompt_ctx}. Mode: {mode}.
             
-            CRITICAL MULTILINGUAL INSTRUCTION:
-            Generate EXHAUSTIVE, multi-page level detail in English first.
-            Then type EXACTLY this delimiter on a new line: ===HINDI_START===
-            Then provide the EXACT same exhaustive detail translated into professional Hindi.
-            DO NOT truncate. Write at least 1500 words per language.
-
-            ANALYSIS REQUIREMENTS (Extreme Depth Required):
-            1. **ASHTAKOOTA MILAN (For Marriage Mode ONLY):** You MUST calculate and output the exact points out of 36 (Guna Milan) using the provided Moon Nakshatras and Signs. Explicitly break down the score for: Varna (1), Vashya (2), Tara (3), Yoni (4), Graha Maitri (5), Gana (6), Bhakoot (7), and Nadi (8). Explain Nadi and Bhakoot dosha if present.
-            2. **Minute-to-Minute Marriage Analysis:** Analyze the 7th Lord conjunctions, aspects, Mangal Dosha (and its cancellations), and Navamsha (D9) potential for psychological synchrony. 
-            3. **Deep Progeny Vitality:** Analyze the 5th House, 5th Lord, Jupiter, and explicitly discuss Saptamsha (D7) themes. Give the potential timing of progeny based on current Vimshottari Mahadasha/Antardasha.
-            4. **Bio-Celestial Blueprint:** Deep physiological vulnerabilities using Houses 6/8/12. Give precise 'Sattvic' nutrition to balance specific elements (Agni/Vata/Kapha).
-            5. **Professional Karma:** Exact cognitive skillset mapped to 10th House.
-            6. **Dasha Extrapolation:** Use provided Mahadasha/Antardasha to calculate precise Pratyantar, Sookshm, and Prana timing.
-            7. **Citations:** Back health claims with (Author, Year). Use Bhagavad Gita and Chanakya Niti.
+            eng_prompt = f"""
+            Role: PhD Research Scientist & Vedic Astrologer. Date: {datetime.datetime.now()}. Matrix: {prompt_ctx}. Mode: {mode}.
+            
+            Write an EXHAUSTIVE English report (minimum 1500 words).
+            1. Ashtakoota Milan (If Marriage): Break down the 36 points exact score.
+            2. Minute-to-Minute Marriage: 7th Lord, Navamsha (D9), Mangal Dosha.
+            3. Progeny Vitality: 5th House, Jupiter, Saptamsha (D7), precise dasha timing.
+            4. Bio-Celestial Blueprint: Houses 6/8/12 vulnerabilities and Sattvic nutrition.
+            5. Professional Karma: 10th House skillset.
+            6. Citations: Back claims with (Author, Year). Use Chanakya Niti.
             """
             
             try:
-                completion = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.6, 
-                    max_tokens=8000
-                )
-                report = completion.choices[0].message.content
+                eng_res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": eng_prompt}], temperature=0.6, max_tokens=5000)
+                eng_text = eng_res.choices[0].message.content
                 
-                st.markdown("---")
-                
-                if "===HINDI_START===" in report:
-                    eng_text, hin_text = report.split("===HINDI_START===")
-                    tab1, tab2 = st.tabs(["🇬🇧 Exhaustive English Analysis", "🇮🇳 विस्तृत हिंदी विश्लेषण (Hindi)"])
-                    with tab1: st.markdown(eng_text.strip())
-                    with tab2: st.markdown(hin_text.strip())
-                    
-                    download_str = f"# ENGLISH REPORT\n\n{eng_text.strip()}\n\n---\n\n# HINDI REPORT\n\n{hin_text.strip()}"
-                else:
-                    st.markdown(report)
-                    download_str = report
+                with st.spinner("Translating matrix into Academic Hindi..."):
+                    hin_prompt = f"Translate the following report into highly accurate, fluent Hindi (हिंदी). Maintain formatting.\n\n{eng_text}"
+                    hin_res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": hin_prompt}], temperature=0.3, max_tokens=6000)
+                    hin_text = hin_res.choices[0].message.content
 
-                file_bytes = download_str.encode('utf-8')
-                st.download_button(
-                    label="📥 Download Full In-Depth Report (Markdown)", 
-                    data=file_bytes, 
-                    file_name="Deep_Bio_Audit_Report.md", 
-                    mime="text/markdown"
-                )
+                st.markdown("---")
+                tab1, tab2 = st.tabs(["🇬🇧 Exhaustive English", "🇮🇳 विस्तृत हिंदी विश्लेषण"])
+                with tab1: st.markdown(eng_text.strip())
+                with tab2: st.markdown(hin_text.strip())
                 
-            except Exception as e: st.error(f"Groq API Error: {e}")
+                # --- NATIVE PDF COMPILER ---
+                with st.spinner("Compiling Native PDF Document..."):
+                    font_ready = setup_hindi_font()
+                    buf = io.BytesIO()
+                    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+                    styles = getSampleStyleSheet()
+                    
+                    eng_style = ParagraphStyle('English', parent=styles['Normal'], fontName='Helvetica', fontSize=10, spaceAfter=10)
+                    if font_ready:
+                        hin_style = ParagraphStyle('Hindi', parent=styles['Normal'], fontName='HindiFont', fontSize=11, spaceAfter=10, leading=16)
+                    else:
+                        hin_style = eng_style # Safety fallback
+                        
+                    elements = []
+                    
+                    # Add Chart Images to PDF
+                    for f in figs:
+                        ib = io.BytesIO(); f.savefig(ib, format='png'); ib.seek(0)
+                        elements.append(Image(ib, 3.5*inch, 3.5*inch))
+                        elements.append(Spacer(1, 10))
+                        
+                    # Add English Text
+                    elements.append(Paragraph("<b>ENGLISH BIO-CELESTIAL REPORT</b>", styles['Heading1']))
+                    clean_eng = format_text_for_pdf(eng_text)
+                    for para in clean_eng.split('\n'):
+                        if para.strip(): elements.append(Paragraph(para, eng_style))
+                    
+                    elements.append(Spacer(1, 30))
+                    
+                    # Add Hindi Text
+                    elements.append(Paragraph("<b>HINDI REPORT (हिंदी विश्लेषण)</b>", styles['Heading1']))
+                    clean_hin = format_text_for_pdf(hin_text)
+                    for para in clean_hin.split('\n'):
+                        if para.strip(): elements.append(Paragraph(para, hin_style))
+                        
+                    doc.build(elements)
+                    
+                    st.download_button(
+                        label="📥 Download Bilingual PDF Report", 
+                        data=buf.getvalue(), 
+                        file_name="IronPrimer_Bio_Audit.pdf", 
+                        mime="application/pdf"
+                    )
+                
+            except Exception as e: st.error(f"Groq API / PDF Error: {e}")

@@ -137,7 +137,7 @@ def get_coords(city):
     except: pass
 
     try:
-        nom = Nominatim(user_agent="iron_primer_v20", timeout=10)
+        nom = Nominatim(user_agent="iron_primer_v21", timeout=10)
         loc = nom.geocode(city)
         if loc: return (loc.latitude, loc.longitude)
     except: pass
@@ -209,7 +209,7 @@ def draw_chart(data, title="Celestial Matrix"):
 # 5. STREAMLIT CORE UI & PDF EXPORT
 # ==========================================
 st.set_page_config(page_title="Iron Primer PhD Engine", page_icon="🧬", layout="wide")
-st.title("🧬 Scientific-Vedic Bilingual Engine (PDF Native)")
+st.title("🧬 Scientific-Vedic Bilingual Engine (V21)")
 st.markdown("---")
 
 with st.sidebar:
@@ -240,7 +240,7 @@ if st.button("🚀 Generate PDF & Dashboard Report"):
             d1 = calculate_chart(dob1, tob1, city1, tz1)
             if d1 == "CITY_ERR": st.error(f"❌ Could not locate city: {city1}."); st.stop()
             
-            figs = [draw_chart(d1, "Individual 1 Celestial Matrix")]
+            figs = [draw_chart(d1, "Individual Celestial Matrix")]
             prompt_ctx = f"P1 Data: {json.dumps(d1)}"
             
             if mode == "Marriage & Progeny Sync":
@@ -256,24 +256,38 @@ if st.button("🚀 Generate PDF & Dashboard Report"):
             
             client = Groq(api_key=groq_key)
             
-            eng_prompt = f"""
-            Role: PhD Research Scientist & Vedic Astrologer. Date: {datetime.datetime.now()}. Matrix: {prompt_ctx}. Mode: {mode}.
-            
-            Write an EXHAUSTIVE English report (minimum 1500 words).
-            1. Ashtakoota Milan (If Marriage): Break down the 36 points exact score.
-            2. Minute-to-Minute Marriage: 7th Lord, Navamsha (D9), Mangal Dosha.
-            3. Progeny Vitality: 5th House, Jupiter, Saptamsha (D7), precise dasha timing.
-            4. Bio-Celestial Blueprint: Houses 6/8/12 vulnerabilities and Sattvic nutrition.
-            5. Professional Karma: 10th House skillset.
-            6. Citations: Back claims with (Author, Year). Use Chanakya Niti.
-            """
+            # --- SPLIT PROMPT ARCHITECTURE ---
+            if mode == "Individual Bio-Audit":
+                eng_prompt = f"""
+                Role: PhD Research Scientist & Vedic Astrologer. Date: {datetime.datetime.now()}. Matrix: {prompt_ctx}. Mode: {mode}.
+                
+                Write an EXHAUSTIVE English report (minimum 1500 words) focusing STRICTLY on this single individual. DO NOT mention matchmaking, Guna Milan, or partner compatibility.
+                
+                1. **Bio-Celestial Blueprint (Health):** Analyze Houses 1/6/8/12. Detail physiological vulnerabilities, Agni/Vata/Kapha balance, and precise Sattvic nutrition.
+                2. **Professional Karma & Wealth:** Analyze 2nd, 10th, and 11th Houses. Detail cognitive skillset, wealth accumulation patterns, and career trajectory.
+                3. **Psychological & Dharma Matrix:** Analyze the Moon, 4th House (inner peace), and 9th House (Dharma/Luck). 
+                4. **Dasha Extrapolation:** Use the provided Mahadasha/Antardasha to calculate precise Pratyantar, Sookshm, and Prana timing for current life events.
+                5. **Citations & Wisdom:** Back claims with scientific literature (Author, Year). Use Bhagavad Gita and Chanakya Niti for strategic life advice.
+                """
+            else:
+                eng_prompt = f"""
+                Role: PhD Research Scientist & Vedic Astrologer. Date: {datetime.datetime.now()}. Matrix: {prompt_ctx}. Mode: {mode}.
+                
+                Write an EXHAUSTIVE English report (minimum 1500 words) for both individuals.
+                1. **Ashtakoota Milan:** Break down the exact 36-point score using Nakshatras and Padas.
+                2. **Minute-to-Minute Marriage:** 7th Lord, Navamsha (D9), Mangal Dosha and cancellations.
+                3. **Progeny Vitality:** 5th House, Jupiter, Saptamsha (D7), and precise dasha timing for children.
+                4. **Bio-Celestial Blueprint:** Houses 6/8/12 vulnerabilities and Sattvic nutrition for both.
+                5. **Professional Karma:** 10th House skillset overview.
+                6. **Citations:** Back claims with (Author, Year). Use Chanakya Niti for marital strategy.
+                """
             
             try:
                 eng_res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": eng_prompt}], temperature=0.6, max_tokens=5000)
                 eng_text = eng_res.choices[0].message.content
                 
                 with st.spinner("Translating matrix into Academic Hindi..."):
-                    hin_prompt = f"Translate the following report into highly accurate, fluent Hindi (हिंदी). Maintain formatting.\n\n{eng_text}"
+                    hin_prompt = f"Translate the following report into highly accurate, fluent Hindi (हिंदी). Maintain all scientific formatting.\n\n{eng_text}"
                     hin_res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": hin_prompt}], temperature=0.3, max_tokens=6000)
                     hin_text = hin_res.choices[0].message.content
 
@@ -297,13 +311,11 @@ if st.button("🚀 Generate PDF & Dashboard Report"):
                         
                     elements = []
                     
-                    # Add Chart Images to PDF
                     for f in figs:
                         ib = io.BytesIO(); f.savefig(ib, format='png'); ib.seek(0)
                         elements.append(Image(ib, 3.5*inch, 3.5*inch))
                         elements.append(Spacer(1, 10))
                         
-                    # Add English Text
                     elements.append(Paragraph("<b>ENGLISH BIO-CELESTIAL REPORT</b>", styles['Heading1']))
                     clean_eng = format_text_for_pdf(eng_text)
                     for para in clean_eng.split('\n'):
@@ -311,7 +323,6 @@ if st.button("🚀 Generate PDF & Dashboard Report"):
                     
                     elements.append(Spacer(1, 30))
                     
-                    # Add Hindi Text
                     elements.append(Paragraph("<b>HINDI REPORT (हिंदी विश्लेषण)</b>", styles['Heading1']))
                     clean_hin = format_text_for_pdf(hin_text)
                     for para in clean_hin.split('\n'):

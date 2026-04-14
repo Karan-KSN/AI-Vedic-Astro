@@ -12,12 +12,6 @@ from geopy.geocoders import Nominatim
 import io
 import time
 
-# PDF Generation
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import inch
-
 # ==========================================
 # 1. SCIENTIFIC-VEDIC CONSTANTS & NAKSHATRAS
 # ==========================================
@@ -43,7 +37,7 @@ def get_planet_dignity(planet, sign):
     return "Neutral"
 
 def get_nakshatra_pada(lon):
-    """Calculates exact Nakshatra and Pada (1-4) for precise Guna Milan."""
+    """Calculates exact Nakshatra and Pada for precise Guna Milan."""
     nak_span = 360 / 27
     pada_span = nak_span / 4
     nak_idx = int(lon / nak_span)
@@ -94,15 +88,36 @@ def get_detailed_dasha(moon_lon, dob):
     return {"Mahadasha": m_lord, "Antardasha": "Transitioning"}
 
 # ==========================================
-# 3. ASTRONOMICAL CALCULATION
+# 3. ROBUST ASTRONOMICAL CALCULATION
 # ==========================================
 
 def get_coords(city):
-    geolocator = Nominatim(user_agent="iron_primer_v18_deep")
-    try:
-        location = geolocator.geocode(city, timeout=10)
-        return (location.latitude, location.longitude) if location else (None, None)
-    except: return (None, None)
+    """Robust offline fallback to prevent CITY_ERR."""
+    local_db = {
+        "patiala": (30.3398, 76.3869),
+        "chandigarh": (30.7333, 76.7794),
+        "mohali": (30.7046, 76.7179),
+        "new delhi": (28.6139, 77.2090),
+        "delhi": (28.6139, 77.2090),
+        "mumbai": (19.0760, 72.8777),
+        "bangalore": (12.9716, 77.5946)
+    }
+    
+    city_clean = city.lower().strip()
+    if city_clean in local_db:
+        return local_db[city_clean]
+        
+    user_agents = ["iron_primer_master", "vedic_engine_v19", "phd_research_tool"]
+    for ua in user_agents:
+        try:
+            geolocator = Nominatim(user_agent=ua)
+            location = geolocator.geocode(city, timeout=10)
+            if location:
+                return (location.latitude, location.longitude)
+        except:
+            time.sleep(1)
+            continue
+    return (None, None)
 
 def calculate_chart(dob_str, time_str, city, tz):
     try:
@@ -110,6 +125,7 @@ def calculate_chart(dob_str, time_str, city, tz):
         h, mn = map(int, time_str.split(':'))
         lat, lon = get_coords(city)
         if not lat: return "CITY_ERR"
+        
         local_tz = pytz.timezone(tz)
         utc_dt = local_tz.localize(datetime.datetime(y, m, d, h, mn)).astimezone(pytz.utc)
         jd = swe.julday(utc_dt.year, utc_dt.month, utc_dt.day, utc_dt.hour + utc_dt.minute / 60.0)
@@ -135,7 +151,7 @@ def calculate_chart(dob_str, time_str, city, tz):
                 data[b]["House"] = ((p_idx - a_idx) % 12) + 1
                 
         data["DashaLevels"] = get_detailed_dasha(data["Moon"]["Lon"], datetime.date(y, m, d))
-        data["Moon_Details"] = get_nakshatra_pada(data["Moon"]["Lon"]) # CRITICAL for Ashtakoota
+        data["Moon_Details"] = get_nakshatra_pada(data["Moon"]["Lon"])
         return data
     except Exception as e: return f"ERROR: {str(e)}"
 
@@ -177,7 +193,7 @@ with st.sidebar:
     st.header("🔑 Engine Access")
     groq_key = st.text_input("Groq API Key", type="password")
     mode = st.radio("Select Analysis Protocol", ["Individual Bio-Audit", "Marriage & Progeny Sync"])
-    st.info("High-Precision Mode: Exhaustive Details Enabled")
+    st.info("High-Precision Mode: Offline Coords & Ashtakoota Enabled")
 
 c1, c2 = st.columns(2)
 with c1:
@@ -200,14 +216,16 @@ if st.button("🚀 Generate Exhaustive Multilingual Report"):
     else:
         with st.spinner("Calculating Sub-Divisional Arrays and Guna Milan..."):
             d1 = calculate_chart(dob1, tob1, city1, tz1)
-            if isinstance(d1, str): st.error(f"P1: {d1}"); st.stop()
+            if d1 == "CITY_ERR": st.error(f"❌ Could not locate city: {city1}. Try 'Patiala' or 'Chandigarh'."); st.stop()
+            elif isinstance(d1, str) and "ERROR" in d1: st.error(f"P1: {d1}"); st.stop()
             
             figs = [draw_chart(d1, "Individual 1 Celestial Matrix")]
             prompt_ctx = f"P1 Data: {json.dumps(d1)}"
             
             if mode == "Marriage & Progeny Sync":
                 d2 = calculate_chart(dob2, tob2, city2, tz2)
-                if isinstance(d2, str): st.error(f"P2: {d2}"); st.stop()
+                if d2 == "CITY_ERR": st.error(f"❌ Could not locate city: {city2}. Try 'Patiala' or 'Chandigarh'."); st.stop()
+                elif isinstance(d2, str) and "ERROR" in d2: st.error(f"P2: {d2}"); st.stop()
                 figs.append(draw_chart(d2, "Partner Celestial Matrix"))
                 prompt_ctx += f"\nP2 Data: {json.dumps(d2)}"
             
@@ -229,15 +247,15 @@ if st.button("🚀 Generate Exhaustive Multilingual Report"):
 
             ANALYSIS REQUIREMENTS (Extreme Depth Required):
             1. **ASHTAKOOTA MILAN (For Marriage Mode ONLY):** You MUST calculate and output the exact points out of 36 (Guna Milan) using the provided Moon Nakshatras and Signs. Explicitly break down the score for: Varna (1), Vashya (2), Tara (3), Yoni (4), Graha Maitri (5), Gana (6), Bhakoot (7), and Nadi (8). Explain Nadi and Bhakoot dosha if present.
-            2. **Minute-to-Minute Marriage Analysis:** Do not just say "good or bad". Analyze the 7th Lord conjunctions, aspects, Mangal Dosha (and its cancellations), and Navamsha (D9) potential for psychological synchrony. 
+            2. **Minute-to-Minute Marriage Analysis:** Analyze the 7th Lord conjunctions, aspects, Mangal Dosha (and its cancellations), and Navamsha (D9) potential for psychological synchrony. 
             3. **Deep Progeny Vitality:** Analyze the 5th House, 5th Lord, Jupiter, and explicitly discuss Saptamsha (D7) themes. Give the potential timing of progeny based on current Vimshottari Mahadasha/Antardasha.
             4. **Bio-Celestial Blueprint:** Deep physiological vulnerabilities using Houses 6/8/12. Give precise 'Sattvic' nutrition to balance specific elements (Agni/Vata/Kapha).
             5. **Professional Karma:** Exact cognitive skillset mapped to 10th House.
-            6. **Citations:** Back health/psychological claims with (Author, Year). Use Bhagavad Gita and Chanakya Niti.
+            6. **Dasha Extrapolation:** Use provided Mahadasha/Antardasha to calculate precise Pratyantar, Sookshm, and Prana timing.
+            7. **Citations:** Back health claims with (Author, Year). Use Bhagavad Gita and Chanakya Niti.
             """
             
             try:
-                # Max tokens cranked to 8000 to ensure the deep-dive doesn't get cut off
                 completion = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=[{"role": "user", "content": prompt}],

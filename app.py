@@ -8,7 +8,7 @@ import datetime
 import pytz
 from groq import Groq
 import json
-from geopy.geocoders import Nominatim
+from geopy.geocoders import Nominatim, ArcGIS
 import io
 import time
 
@@ -92,31 +92,55 @@ def get_detailed_dasha(moon_lon, dob):
 # ==========================================
 
 def get_coords(city):
-    """Robust offline fallback to prevent CITY_ERR."""
+    """
+    Bulletproof coordinate finder with a 3-Tier System:
+    1. Local DB (Instant)
+    2. ArcGIS (Enterprise, Cloud-Stable)
+    3. Nominatim (OSM Fallback)
+    """
+    city_clean = city.lower().strip()
+    
+    # TIER 1: THE LOCAL CACHE (0.001s response time)
     local_db = {
         "patiala": (30.3398, 76.3869),
         "chandigarh": (30.7333, 76.7794),
         "mohali": (30.7046, 76.7179),
+        "sangrur": (30.2458, 75.8421),
+        "ludhiana": (30.9009, 75.8572),
+        "jalandhar": (31.3260, 75.5761),
+        "amritsar": (31.6340, 74.8723),
         "new delhi": (28.6139, 77.2090),
         "delhi": (28.6139, 77.2090),
         "mumbai": (19.0760, 72.8777),
         "bangalore": (12.9716, 77.5946)
     }
     
-    city_clean = city.lower().strip()
     if city_clean in local_db:
         return local_db[city_clean]
         
-    user_agents = ["iron_primer_master", "vedic_engine_v19", "phd_research_tool"]
+    # TIER 2: ArcGIS (Extremely stable on Streamlit Cloud, no API key needed)
+    try:
+        arc_geolocator = ArcGIS(timeout=10)
+        location = arc_geolocator.geocode(city)
+        if location:
+            return (location.latitude, location.longitude)
+    except Exception as e:
+        pass # Silently fall through to Tier 3 if ArcGIS fails
+
+    # TIER 3: Nominatim (The original fallback)
+    import time
+    user_agents = ["iron_primer_v20_global", "phd_research_node_alpha"]
     for ua in user_agents:
         try:
-            geolocator = Nominatim(user_agent=ua)
-            location = geolocator.geocode(city, timeout=10)
+            nom_geolocator = Nominatim(user_agent=ua)
+            location = nom_geolocator.geocode(city, timeout=10)
             if location:
                 return (location.latitude, location.longitude)
         except:
             time.sleep(1)
             continue
+            
+    # If all 3 tiers fail
     return (None, None)
 
 def calculate_chart(dob_str, time_str, city, tz):

@@ -12,13 +12,20 @@ from geopy.geocoders import Nominatim
 import io
 import time
 
+# PDF Generation
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import inch
+
 # ==========================================
-# 1. SCIENTIFIC-VEDIC CONSTANTS
+# 1. SCIENTIFIC-VEDIC CONSTANTS & NAKSHATRAS
 # ==========================================
 
 SIGNS = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
 DASHA_ORDER = ["Ketu", "Venus", "Sun", "Moon", "Mars", "Rahu", "Jupiter", "Saturn", "Mercury"]
 DASHA_YRS = {"Ketu": 7, "Venus": 20, "Sun": 6, "Moon": 10, "Mars": 7, "Rahu": 18, "Jupiter": 16, "Saturn": 19, "Mercury": 17}
+NAKSHATRAS = ["Ashwini", "Bharani", "Krittika", "Rohini", "Mrigashira", "Ardra", "Punarvasu", "Pushya", "Ashlesha", "Magha", "Purva Phalguni", "Uttara Phalguni", "Hasta", "Chitra", "Swati", "Vishakha", "Anuradha", "Jyeshtha", "Mula", "Purva Ashadha", "Uttara Ashadha", "Shravana", "Dhanishta", "Shatabhisha", "Purva Bhadrapada", "Uttara Bhadrapada", "Revati"]
 
 def get_planet_dignity(planet, sign):
     dignities = {
@@ -34,6 +41,15 @@ def get_planet_dignity(planet, sign):
         if sign == dignities[planet]["Ex"]: return "Exalted (Uchcha)"
         if sign == dignities[planet]["Deb"]: return "Debilitated (Neecha)"
     return "Neutral"
+
+def get_nakshatra_pada(lon):
+    """Calculates exact Nakshatra and Pada (1-4) for precise Guna Milan."""
+    nak_span = 360 / 27
+    pada_span = nak_span / 4
+    nak_idx = int(lon / nak_span)
+    rem = lon % nak_span
+    pada = int(rem / pada_span) + 1
+    return {"Nakshatra": NAKSHATRAS[nak_idx], "Pada": pada}
 
 # ==========================================
 # 2. TEMPORAL PRECISION ENGINE (DASHAS)
@@ -82,7 +98,7 @@ def get_detailed_dasha(moon_lon, dob):
 # ==========================================
 
 def get_coords(city):
-    geolocator = Nominatim(user_agent="iron_primer_v17_bilingual")
+    geolocator = Nominatim(user_agent="iron_primer_v18_deep")
     try:
         location = geolocator.geocode(city, timeout=10)
         return (location.latitude, location.longitude) if location else (None, None)
@@ -117,7 +133,9 @@ def calculate_chart(dob_str, time_str, city, tz):
             if b != "Ascendant":
                 p_idx = SIGNS.index(data[b]["Sign"])
                 data[b]["House"] = ((p_idx - a_idx) % 12) + 1
+                
         data["DashaLevels"] = get_detailed_dasha(data["Moon"]["Lon"], datetime.date(y, m, d))
+        data["Moon_Details"] = get_nakshatra_pada(data["Moon"]["Lon"]) # CRITICAL for Ashtakoota
         return data
     except Exception as e: return f"ERROR: {str(e)}"
 
@@ -129,7 +147,7 @@ def draw_chart(data, title="Celestial Matrix"):
     p_by_h = {i: [] for i in range(1, 13)}
     l_idx = SIGNS.index(data["Ascendant"]["Sign"]) + 1
     for b, d in data.items():
-        if b not in ["Ascendant", "DashaLevels"]: p_by_h[d["House"]].append(b[:3] if b not in ["Rahu", "Ketu"] else b)
+        if b not in ["Ascendant", "DashaLevels", "Moon_Details"]: p_by_h[d["House"]].append(b[:3] if b not in ["Rahu", "Ketu"] else b)
     fig, ax = plt.subplots(figsize=(5, 5), facecolor='#fdfcf5')
     ax.set_xlim(0, 10); ax.set_ylim(0, 10); ax.axis('off')
     lp = {'color': '#2c3e50', 'linewidth': 2}
@@ -152,14 +170,14 @@ def draw_chart(data, title="Celestial Matrix"):
 # ==========================================
 
 st.set_page_config(page_title="Iron Primer PhD Engine", page_icon="🧬", layout="wide")
-st.title("🧬 Scientific-Vedic Bilingual Engine")
+st.title("🧬 Scientific-Vedic Bilingual Deep Engine")
 st.markdown("---")
 
 with st.sidebar:
     st.header("🔑 Engine Access")
     groq_key = st.text_input("Groq API Key", type="password")
     mode = st.radio("Select Analysis Protocol", ["Individual Bio-Audit", "Marriage & Progeny Sync"])
-    st.info("Bilingual Output: English & Hindi")
+    st.info("High-Precision Mode: Exhaustive Details Enabled")
 
 c1, c2 = st.columns(2)
 with c1:
@@ -177,10 +195,10 @@ if mode == "Marriage & Progeny Sync":
         tob2 = st.text_input("Birth Time (HH:MM)", value="14:15", key="t2")
         tz2 = st.selectbox("Local Timezone", ["Asia/Kolkata", "UTC"], key="z2")
 
-if st.button("🚀 Generate Multilingual PhD Report"):
+if st.button("🚀 Generate Exhaustive Multilingual Report"):
     if not groq_key: st.error("Add Groq API Key.")
     else:
-        with st.spinner("Synthesizing Dual-Language Celestial Matrix..."):
+        with st.spinner("Calculating Sub-Divisional Arrays and Guna Milan..."):
             d1 = calculate_chart(dob1, tob1, city1, tz1)
             if isinstance(d1, str): st.error(f"P1: {d1}"); st.stop()
             
@@ -198,57 +216,54 @@ if st.button("🚀 Generate Multilingual PhD Report"):
             if len(figs) > 1:
                 with cc2: st.pyplot(figs[1])
             
-            # --- AI SYNTHESIS (BILINGUAL LOGIC) ---
             client = Groq(api_key=groq_key)
             prompt = f"""
-            Role: PhD Research Scientist & Vedic Expert (Persona: The Iron Primer).
+            Role: PhD Research Scientist & Vedic Astrologer (Persona: The Iron Primer).
             Current Date: {datetime.datetime.now()}. Matrix: {prompt_ctx}. Mode: {mode}.
             
             CRITICAL MULTILINGUAL INSTRUCTION:
-            You MUST generate the complete analysis in English first.
-            Then, type EXACTLY this delimiter on a new line: ===HINDI_START===
-            After the delimiter, provide the EXACT same complete analysis translated beautifully and accurately into professional, academic Hindi (हिंदी).
-            
-            SCIENTIFIC-VEDIC INSTRUCTIONS (Apply to BOTH languages):
-            1. **Bio-Celestial Blueprint:** Predict physiological vulnerabilities (Agni, Metabolism) using Houses 6/8/12.
-            2. **Professional Karma ROI:** Analyze 10th House lord and Dasha as 'Cognitive Dominance' and 'Market Timing'.
-            3. **Relational Sync:** Analyze 7th/8th house longevity and stability markers.
-            4. **Progeny Vitality:** Analyze 5th House and D7 themes for fertility and progeny timing.
-            5. **Dasha Sequence:** Use calculated Mahadasha/Antardasha to extrapolate Pratyantar and Sookshm levels.
-            6. **Philosophy & Evidence:** Integrate Bhagavad Gita (18.14) and Chanakya Niti. Back behavioral claims with scientific citations (Author, Year).
+            Generate EXHAUSTIVE, multi-page level detail in English first.
+            Then type EXACTLY this delimiter on a new line: ===HINDI_START===
+            Then provide the EXACT same exhaustive detail translated into professional Hindi.
+            DO NOT truncate. Write at least 1500 words per language.
+
+            ANALYSIS REQUIREMENTS (Extreme Depth Required):
+            1. **ASHTAKOOTA MILAN (For Marriage Mode ONLY):** You MUST calculate and output the exact points out of 36 (Guna Milan) using the provided Moon Nakshatras and Signs. Explicitly break down the score for: Varna (1), Vashya (2), Tara (3), Yoni (4), Graha Maitri (5), Gana (6), Bhakoot (7), and Nadi (8). Explain Nadi and Bhakoot dosha if present.
+            2. **Minute-to-Minute Marriage Analysis:** Do not just say "good or bad". Analyze the 7th Lord conjunctions, aspects, Mangal Dosha (and its cancellations), and Navamsha (D9) potential for psychological synchrony. 
+            3. **Deep Progeny Vitality:** Analyze the 5th House, 5th Lord, Jupiter, and explicitly discuss Saptamsha (D7) themes. Give the potential timing of progeny based on current Vimshottari Mahadasha/Antardasha.
+            4. **Bio-Celestial Blueprint:** Deep physiological vulnerabilities using Houses 6/8/12. Give precise 'Sattvic' nutrition to balance specific elements (Agni/Vata/Kapha).
+            5. **Professional Karma:** Exact cognitive skillset mapped to 10th House.
+            6. **Citations:** Back health/psychological claims with (Author, Year). Use Bhagavad Gita and Chanakya Niti.
             """
             
             try:
-                # Increased Max Tokens to allow for the massive double-language output
+                # Max tokens cranked to 8000 to ensure the deep-dive doesn't get cut off
                 completion = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.6, 
-                    max_tokens=6000
+                    max_tokens=8000
                 )
                 report = completion.choices[0].message.content
                 
                 st.markdown("---")
                 
-                # --- TABBED UI SPLIT ---
                 if "===HINDI_START===" in report:
                     eng_text, hin_text = report.split("===HINDI_START===")
-                    tab1, tab2 = st.tabs(["🇬🇧 English Analysis", "🇮🇳 हिंदी विश्लेषण (Hindi)"])
+                    tab1, tab2 = st.tabs(["🇬🇧 Exhaustive English Analysis", "🇮🇳 विस्तृत हिंदी विश्लेषण (Hindi)"])
                     with tab1: st.markdown(eng_text.strip())
                     with tab2: st.markdown(hin_text.strip())
                     
-                    # Prepare Download String
                     download_str = f"# ENGLISH REPORT\n\n{eng_text.strip()}\n\n---\n\n# HINDI REPORT\n\n{hin_text.strip()}"
                 else:
                     st.markdown(report)
                     download_str = report
 
-                # Rich Text / Markdown Download (Crash-Proof for Unicode/Hindi)
                 file_bytes = download_str.encode('utf-8')
                 st.download_button(
-                    label="📥 Download Full Report (Text/Markdown)", 
+                    label="📥 Download Full In-Depth Report (Markdown)", 
                     data=file_bytes, 
-                    file_name="Bio_Audit_Report.md", 
+                    file_name="Deep_Bio_Audit_Report.md", 
                     mime="text/markdown"
                 )
                 

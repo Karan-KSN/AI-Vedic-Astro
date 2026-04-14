@@ -12,12 +12,6 @@ from geopy.geocoders import Nominatim
 import io
 import time
 
-# PDF Generation
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import inch
-
 # ==========================================
 # 1. SCIENTIFIC-VEDIC CONSTANTS
 # ==========================================
@@ -46,7 +40,6 @@ def get_planet_dignity(planet, sign):
 # ==========================================
 
 def get_detailed_dasha(moon_lon, dob):
-    """Calculates real-time Mahadasha and Antardasha grounding."""
     nak_span = 360/27
     nak_idx = int(moon_lon / nak_span)
     start_lord_idx = nak_idx % 9
@@ -89,7 +82,7 @@ def get_detailed_dasha(moon_lon, dob):
 # ==========================================
 
 def get_coords(city):
-    geolocator = Nominatim(user_agent="iron_primer_v16_final")
+    geolocator = Nominatim(user_agent="iron_primer_v17_bilingual")
     try:
         location = geolocator.geocode(city, timeout=10)
         return (location.latitude, location.longitude) if location else (None, None)
@@ -159,14 +152,14 @@ def draw_chart(data, title="Celestial Matrix"):
 # ==========================================
 
 st.set_page_config(page_title="Iron Primer PhD Engine", page_icon="🧬", layout="wide")
-st.title("🧬 Scientific-Vedic Clinical & Professional Engine")
+st.title("🧬 Scientific-Vedic Bilingual Engine")
 st.markdown("---")
 
 with st.sidebar:
     st.header("🔑 Engine Access")
     groq_key = st.text_input("Groq API Key", type="password")
     mode = st.radio("Select Analysis Protocol", ["Individual Bio-Audit", "Marriage & Progeny Sync"])
-    st.info("Using Llama 3.3-70B Logic Layer")
+    st.info("Bilingual Output: English & Hindi")
 
 c1, c2 = st.columns(2)
 with c1:
@@ -184,10 +177,10 @@ if mode == "Marriage & Progeny Sync":
         tob2 = st.text_input("Birth Time (HH:MM)", value="14:15", key="t2")
         tz2 = st.selectbox("Local Timezone", ["Asia/Kolkata", "UTC"], key="z2")
 
-if st.button("🚀 Generate PhD Bio-Celestial Report"):
+if st.button("🚀 Generate Multilingual PhD Report"):
     if not groq_key: st.error("Add Groq API Key.")
     else:
-        with st.spinner("Synthesizing Genetic & Celestial Inter-relations..."):
+        with st.spinner("Synthesizing Dual-Language Celestial Matrix..."):
             d1 = calculate_chart(dob1, tob1, city1, tz1)
             if isinstance(d1, str): st.error(f"P1: {d1}"); st.stop()
             
@@ -200,45 +193,63 @@ if st.button("🚀 Generate PhD Bio-Celestial Report"):
                 figs.append(draw_chart(d2, "Partner Celestial Matrix"))
                 prompt_ctx += f"\nP2 Data: {json.dumps(d2)}"
             
-            # Layout Charts
             cc1, cc2 = st.columns(2)
             with cc1: st.pyplot(figs[0])
             if len(figs) > 1:
                 with cc2: st.pyplot(figs[1])
             
-            # --- AI SYNTHESIS (THE IRON PRIMER LOGIC) ---
+            # --- AI SYNTHESIS (BILINGUAL LOGIC) ---
             client = Groq(api_key=groq_key)
             prompt = f"""
             Role: PhD Research Scientist & Vedic Expert (Persona: The Iron Primer).
             Current Date: {datetime.datetime.now()}. Matrix: {prompt_ctx}. Mode: {mode}.
             
-            SCIENTIFIC-VEDIC INSTRUCTIONS:
-            1. **Bio-Celestial Blueprint (Clinical):** Predict physiological vulnerabilities (Agni, Metabolism, Inflammation) using Houses 6/8/12. Frame results through 'Systems Biology' and 'Circadian Rhythms'.
+            CRITICAL MULTILINGUAL INSTRUCTION:
+            You MUST generate the complete analysis in English first.
+            Then, type EXACTLY this delimiter on a new line: ===HINDI_START===
+            After the delimiter, provide the EXACT same complete analysis translated beautifully and accurately into professional, academic Hindi (हिंदी).
+            
+            SCIENTIFIC-VEDIC INSTRUCTIONS (Apply to BOTH languages):
+            1. **Bio-Celestial Blueprint:** Predict physiological vulnerabilities (Agni, Metabolism) using Houses 6/8/12.
             2. **Professional Karma ROI:** Analyze 10th House lord and Dasha as 'Cognitive Dominance' and 'Market Timing'.
-            3. **Relational Synchronization (Marriage):** Analyze 7th/8th house longevity. Discuss biological and psychological stability markers.
-            4. **Progeny Vitality (Children):** Analyze 5th House and D7 themes for fertility and progeny timing based on current Dasha cycles.
-            5. **Dasha Sequence:** Use calculated Mahadasha/Antardasha to extrapolate Pratyantar, Sookshm, and Prana levels for high-precision event timing.
+            3. **Relational Sync:** Analyze 7th/8th house longevity and stability markers.
+            4. **Progeny Vitality:** Analyze 5th House and D7 themes for fertility and progeny timing.
+            5. **Dasha Sequence:** Use calculated Mahadasha/Antardasha to extrapolate Pratyantar and Sookshm levels.
             6. **Philosophy & Evidence:** Integrate Bhagavad Gita (18.14) and Chanakya Niti. Back behavioral claims with scientific citations (Author, Year).
             """
             
             try:
+                # Increased Max Tokens to allow for the massive double-language output
                 completion = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=0.65, max_tokens=4000
+                    temperature=0.6, 
+                    max_tokens=6000
                 )
                 report = completion.choices[0].message.content
-                st.markdown("---")
-                st.markdown(report)
                 
-                # PDF Setup
-                buf = io.BytesIO(); doc = SimpleDocTemplate(buf, pagesize=A4); styles = getSampleStyleSheet()
-                elements = []
-                for f in figs:
-                    ib = io.BytesIO(); f.savefig(ib, format='png'); ib.seek(0)
-                    elements.append(Image(ib, 3.5*inch, 3.5*inch))
-                elements.append(Spacer(1, 20))
-                elements.append(Paragraph(report.replace('\n', '<br/>'), styles['Normal']))
-                doc.build(elements)
-                st.download_button("📥 Download Final PhD Report", data=buf.getvalue(), file_name="Bio_Audit_Report.pdf", mime="application/pdf")
+                st.markdown("---")
+                
+                # --- TABBED UI SPLIT ---
+                if "===HINDI_START===" in report:
+                    eng_text, hin_text = report.split("===HINDI_START===")
+                    tab1, tab2 = st.tabs(["🇬🇧 English Analysis", "🇮🇳 हिंदी विश्लेषण (Hindi)"])
+                    with tab1: st.markdown(eng_text.strip())
+                    with tab2: st.markdown(hin_text.strip())
+                    
+                    # Prepare Download String
+                    download_str = f"# ENGLISH REPORT\n\n{eng_text.strip()}\n\n---\n\n# HINDI REPORT\n\n{hin_text.strip()}"
+                else:
+                    st.markdown(report)
+                    download_str = report
+
+                # Rich Text / Markdown Download (Crash-Proof for Unicode/Hindi)
+                file_bytes = download_str.encode('utf-8')
+                st.download_button(
+                    label="📥 Download Full Report (Text/Markdown)", 
+                    data=file_bytes, 
+                    file_name="Bio_Audit_Report.md", 
+                    mime="text/markdown"
+                )
+                
             except Exception as e: st.error(f"Groq API Error: {e}")
